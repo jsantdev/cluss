@@ -59,3 +59,18 @@ test('fan avatars and their live events use the same left or right side', () => 
   assert.match(html, /team=user\?supportTeamFor\(key\):sel/);
   assert.match(html, /recentTeam>=0\?recentTeam:\(user\?supportTeamFor\(key\):-1\)/);
 });
+
+test('large bottom-right gift count mirrors the real gift statistic without an icon', () => {
+  assert.match(html, /id="giftTotal"[^>]*>0<\/div>/);
+  assert.match(html, /#giftTotal\{[^}]*right:10px;bottom:5px[^}]*color:#ff3b30[^}]*font:900 38px/);
+  assert.match(html, /giftTotal\.textContent=stFmt\(ST\.gift\)/);
+  assert.match(html, /giftTotal\.setAttribute\('aria-label','Regalos recibidos: '\+ST\.gift\)/);
+});
+
+test('gift turbo reminder repeats every five minutes only past 50 percent and level four', () => {
+  assert.match(html, /const GIFT_TURBO_REMINDER_MS=5\*60\*1000/);
+  assert.match(html, /progress>50&&tapLevel>=4/);
+  assert.match(html, /now-giftTurboReminderAt>=GIFT_TURBO_REMINDER_MS/);
+  assert.match(html, /giftTurboReminderAt=now;return/);
+  assert.match(html, /Enviar un regalo a tu equipo activa el modo turbo y le ayuda a llegar más rápido a la meta\./);
+});

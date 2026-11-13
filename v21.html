@@ -331,6 +331,7 @@ background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.4)),r
 .hd .cn{display:block;width:76px;text-align:center;font:800 11px Inter,sans-serif;letter-spacing:-.2px;line-height:1;white-space:nowrap;overflow:hidden}
 .sv>svg{height:428px}
 .evs{display:flex;gap:2px;padding:3px 4px;background:linear-gradient(#7a4e2a,#5a3a1e);border:2px solid #3f2713;border-radius:10px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
+#giftTotal{position:absolute;right:10px;bottom:5px;z-index:10;color:#ff3b30;font:900 38px/1 Inter,sans-serif;text-align:right;text-shadow:0 2px 3px #000,0 0 8px rgba(255,59,48,.8);pointer-events:none}
 .st{flex:1;min-width:0;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;line-height:1}
 .st b{font-size:13px;font-weight:400}
 .st span{font:800 11px Inter,sans-serif;color:#fff;text-shadow:0 1px 1px #000;white-space:nowrap}
@@ -640,6 +641,7 @@ document.addEventListener('visibilitychange',function(){if(document.hidden)flush
 <div class="foot"><span class="live connecting" id="connection" role="status" aria-live="polite">cluss</span><button class="sm" id="bLang" type="button" aria-label="Idioma / Language" title="Idioma / Language">EN</button><button class="sm on" id="bVoz" aria-pressed="true" aria-label="Narrador Don Tortu (V)" title="Narrador Don Tortu (V)">🗣️</button><button class="sm on" id="bVozB" aria-pressed="true" aria-label="Narrador B: lee comentarios del chat" title="Narrador B: lee comentarios del chat">🎙️B</button><button class="sm on" id="bSfx" aria-pressed="true" aria-label="Efectos de sonido (S)">🔊</button><button class="sm" id="bStat" aria-label="Estadísticas de torneos" title="Estadísticas de torneos">📊</button><button class="sm" id="bReset" aria-label="Reiniciar copas (tocar dos veces)" title="Reiniciar copas (tocar dos veces)">↺</button><button class="sm" id="bTurboDn" aria-label="Bajar el límite de taps del turbo en 100" title="Turbo: 100 taps menos">➖</button><button class="sm" id="bTurboUp" aria-label="Subir el límite de taps del turbo en 100" title="Turbo: 100 taps más">➕</button><button class="sm" id="bRefresh" aria-label="Refrescar página" title="Refrescar página">🔄</button><span class="version" aria-label="Límite de taps del turbo y versión 1.2.2"><span id="turboLim">⚡ Límite 50 taps</span> · v1.2.2</span></div>
 <!-- FRANJA DE ESTADISTICAS del live: solo eventos REALES (los bots y los toques manuales no cuentan). El contador de regalos es solo informativo -->
 <div class="evs" id="evs" role="status" aria-label="Estadisticas del live"><div class="st" data-k="member" title="Unidos"><b>👥</b><span>0</span></div><div class="st" data-k="chat" title="Comentarios"><b>💬</b><span>0</span></div><div class="st" data-k="gift" title="Regalos"><b>🎁</b><span>0</span></div><div class="st" data-k="like" title="Me gusta"><b>❤️</b><span>0</span></div><div class="st" data-k="follow" title="Seguidores nuevos"><b>➕</b><span>0</span></div><div class="st" data-k="share" title="Compartidos"><b>↗️</b><span>0</span></div></div>
+<div id="giftTotal" role="status" aria-label="Regalos recibidos: 0">0</div>
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- PANEL DE ESTADISTICAS (📊/🌎): contiene nombres y comentarios reales; cerrarlo antes de mostrar pantalla -->
 <section id="stp" hidden role="dialog" aria-label="Estadísticas"><header><b>🐢 Estadísticas</b><span><button data-reset>↺ Reiniciar copas</button> <button data-close aria-label="Cerrar">✕</button></span></header><nav><button data-tab="torneos">🏆 Torneos</button><button data-tab="paises">🌎 Clubes</button><button data-tab="usuarios">👤 Usuarios</button><button data-tab="regalos">🎁 Regalos</button></nav><div class="stb"></div></section>
@@ -1765,6 +1767,7 @@ function renderTop3(){
 }
 /* ===== ESTADISTICAS REALES: solo eventos del live. Los bots (bot:true) y los toques manuales no cuentan ===== */
 const ST={member:0,chat:0,gift:0,like:0,follow:0,share:0};
+const giftTotal=document.getElementById('giftTotal');
 const idleStat=document.createElement('div');
 idleStat.className='st';idleStat.dataset.k='idle';idleStat.title='Tiempo restante sin interacción';
 idleStat.innerHTML='<b>⏳</b><span id="idleCountdown" aria-live="off">60s</span>';
@@ -1784,6 +1787,7 @@ handleLiveEntry=function(e){
   const n=(e.type==='like'||e.type==='gift')?Math.max(1,+e.activityCount||1):1;
   ST[e.type]+=n;const el=document.querySelector('.st[data-k="'+e.type+'"]');
   if(el){el.querySelector('span').textContent=stFmt(ST[e.type]);el.classList.remove('up');void el.offsetWidth;el.classList.add('up')}
+  if(e.type==='gift'&&giftTotal){giftTotal.textContent=stFmt(ST.gift);giftTotal.setAttribute('aria-label','Regalos recibidos: '+ST.gift)}
  }}catch(x){console.error(x)}
  const r=_hleSt(e);
  if(e&&!e.bot)saveTournamentProgress();
@@ -1921,7 +1925,8 @@ function perks(e){
 const SS=window.speechSynthesis;
 if(P.vo===undefined)P.vo=1;
 if(P.vb===undefined)P.vb=1; /* narrador B (lector de chat): su propio boton; no se fuerza por ronda */
-let voices=[],vT0=performance.now(),vLast=-1e9,vRound=0,nxLast=-1e9;const vDone=new Set(),vSess=new Set(); /* vDone: por ronda · vSess: por sesion (pedidos de interaccion, una sola vez) */
+let voices=[],vT0=performance.now(),vLast=-1e9,vRound=0,nxLast=-1e9,giftTurboReminderAt=performance.now();const vDone=new Set(),vSess=new Set(); /* vDone: por ronda · vSess: por sesion (pedidos de interaccion, una sola vez) */
+const GIFT_TURBO_REMINDER_MS=5*60*1000;
 const loadV=()=>{try{voices=SS.getVoices()||[]}catch(e){}};
 if(SS){loadV();SS.onvoiceschanged=loadV}
 const FEMALE_VOICE=/female|woman|femin|mujer|helena|hilda|laura|luc[ií]a|m[oó]nica|paulina|sabina|isabela|ximena|sof[ií]a|elena|carmen|dalia|elvira|salom[eé]|paloma|camila|catalina|lorena|marina/i;
@@ -2050,6 +2055,12 @@ function voWin(i){const n=T[i].n[0]+T[i].n.slice(1).toLowerCase();vDone.add('fin
 setInterval(()=>{
  if(over)return;const now=performance.now(),el=(now-vT0)/1000;
  if(sprint&&!vDone.has('final')){vDone.add('final');speak(VF[vRound%VF.length],'¡Recta final!',true);return}
+ const progress=Math.max(...S.map(x=>x.p));
+ if(!sprint&&!vDone.has('final')&&P.vo&&SS&&progress>50&&tapLevel>=4&&now-giftTurboReminderAt>=GIFT_TURBO_REMINDER_MS){
+  if(!narratorQueue.some(item=>item.intro)&&now-vLast>=5000&&!SS.speaking&&!SS.pending&&speak('Enviar un regalo a tu equipo activa el modo turbo y le ayuda a llegar más rápido a la meta.',null,false)){
+   giftTurboReminderAt=now;return
+  }
+ }
  const call=nextEngagementCall(S.map(x=>x.p),vDone);
  if(call){
   const key='engagement'+call.percent;
@@ -3689,6 +3700,7 @@ const SENT=[
 [/Bienvenidos al duelo (.+?) contra (.+?)\. Aquí cada hincha cuenta: escribe el nombre de tu equipo para apoyar a tu equipo\. ¡Gana el primero que llegue a la meta!/g,"Welcome to the duel $1 versus $2. Here every fan counts: type your team's name to support your team. First to reach the finish line wins!"],
 [/Recta final! Todo se decide ahora\. ¡Vamos, tortugas!/g,'Final stretch! Everything is decided now. Go, turtles!'],
 [/Llegando a la meta! ¡Qué emoción, esto está parejísimo!/g,'Approaching the finish line! How exciting, it is neck and neck!'],
+[/Enviar un regalo a tu equipo activa el modo turbo y le ayuda a llegar más rápido a la meta\./g,'Sending a gift to your team activates turbo mode and helps it reach the finish line faster.'],
 [/El ganador de este duelo pasa a (.+?)\. El que pierde queda eliminado\./g,(m,r)=>'The winner of this duel moves on to '+({'el campeón del torneo':'the tournament champion','la final':'the final','las semifinales':'the semifinals','la siguiente ronda':'the next round'}[r]||r)+'. The loser is eliminated.'],
 [/Ánimo (.+?)! ¡La carrera sigue, a no aflojar!/g,"Come on $1! The race goes on, don't ease up!"],
 [/Vamos (.+?)! ¡Todavía hay pista por delante!/g,"Let's go $1! There's still track ahead!"],

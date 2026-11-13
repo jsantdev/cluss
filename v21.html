@@ -742,6 +742,7 @@ const ELITE_POOL={ /* ELITE NATIONS CUP: 8 paises */
  'el-au':{id:'el-au',n:'AUSTRALIA',s:'AUS',emoji:'🇦🇺',aliases:['AUSTRALIA']},'el-sg':{id:'el-sg',n:'SINGAPUR',s:'SGP',emoji:'🇸🇬',aliases:['SINGAPUR','SINGAPORE']}
 };
 const TOURNAMENT_MODES=['libre','clasico','libertadores','champions','countries','america','elite']; /* 'libre' = TORNEO LIBRE: arranca activo y bloqueado; solo se sale con el boton manual 🔒 */
+const TOURNAMENT_OPTIONS=TOURNAMENT_MODES.slice();
 const TOURNAMENT_LABELS={libre:'TORNEO LIBRE',clasico:'CLÁSICO OLIMPIA VS CERRO',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'COPA DEL MUNDO',america:'COPA AMÉRICA',elite:'ELITE NATIONS CUP'};
 const COUNTRY_CHAMPIONS=['ct-ar','ct-br','ct-de','ct-es','ct-fr','ct-it','ct-uy','ct-en'];
 const COUNTRY_POPULAR_FALLBACK=['ct-py','ct-co','ct-cl','ct-mx','ct-us','ct-pt','ct-nl','ct-jp']; /* entran al Mundial si el chat aun no voto */
@@ -1267,7 +1268,7 @@ document.querySelector('.version').setAttribute('aria-label','Límite de taps de
 document.querySelector('.version').lastChild.textContent=' · v1.2.2';
 function refreshTournamentButton(){tournamentButton.textContent='🏆';tournamentButton.title='Torneo actual: '+TOURNAMENT_LABELS[tournamentMode]+' · cambiar';tournamentButton.setAttribute('aria-label','Cambiar torneo; actual: '+TOURNAMENT_LABELS[tournamentMode])}
 function startTournament(mode){
- if(!TOURNAMENT_MODES.includes(mode))throw new Error('Tipo de torneo desconocido: '+mode);
+ if(!TOURNAMENT_OPTIONS.includes(mode))throw new Error('Tipo de torneo desconocido: '+mode);
  tournamentMode=mode;if(mode==='countries')countryEntrants=[];
  BR=brNew(mode);const c=brCur();
  P.tournamentMode=mode;P.countryEntrants=countryEntrants;P.countryPopularity=countryPopularity;
@@ -1277,7 +1278,11 @@ function startTournament(mode){
  hype('🏆',TOURNAMENT_LABELS[mode],' · '+T[0].n+' vs '+T[1].n,'#ffd566');
 }
 refreshTournamentButton();
-tournamentButton.onclick=()=>startTournament(TOURNAMENT_MODES[(TOURNAMENT_MODES.indexOf(tournamentMode)+1)%TOURNAMENT_MODES.length]);
+tournamentButton.onclick=()=>{
+ const selector=document.getElementById('bTorneoSel');
+ if(selector){selector.click();return}
+ startTournament(TOURNAMENT_OPTIONS[(TOURNAMENT_OPTIONS.indexOf(tournamentMode)+1)%TOURNAMENT_OPTIONS.length]);
+};
 window.clussTorneo={start:startTournament,toast:(m,ic)=>toast(m,ic),modo:()=>tournamentMode}; /* lo usa el boton TORNEO (🔄/🔒) de herramientas */
 
 /* ===== AUDIO (WebAudio sintetizado, sin archivos externos) ===== */
@@ -2859,7 +2864,7 @@ pinta();setInterval(pinta,1500);
 </style>
 <script>
 (function(){
-const M=TOURNAMENT_MODES.slice(),L=TOURNAMENT_LABELS,SHORT={libre:'LIBRE',clasico:'CLÁSICO',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'MUNDIAL',america:'AMÉRICA',elite:'ELITE'};
+const M=TOURNAMENT_OPTIONS.slice(),L=TOURNAMENT_LABELS,SHORT={libre:'LIBRE',clasico:'CLÁSICO',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'MUNDIAL',america:'AMÉRICA',elite:'ELITE'};
 let lock='libre';try{const v=SRV.get('cluss.torneoLock',null);if(v==='auto')lock=null;else if(M.includes(v))lock=v}catch(e){} /* por defecto: TORNEO LIBRE bloqueado */
 const foot=document.querySelector('#topbar .foot')||document.querySelector('.foot');if(!foot)return;
 const b=document.createElement('button');b.id='bTorneoSel';b.type='button';

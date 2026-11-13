@@ -14,6 +14,7 @@ test('free tournament is the default locked mode and can be manually unlocked', 
 });
 
 test('classic mode creates a fixed Olimpia versus Cerro tournament with their shirt-color flags', () => {
+  assert.match(html, /TOURNAMENT_OPTIONS=TOURNAMENT_MODES\.slice\(\)/);
   assert.match(html, /TOURNAMENT_MODES=\['libre','clasico'/);
   assert.match(html, /clasico:'CLÁSICO OLIMPIA VS CERRO'/);
   assert.match(html, /if\(mode==='clasico'\)return\['ol','cp'\]/);
@@ -22,6 +23,11 @@ test('classic mode creates a fixed Olimpia versus Cerro tournament with their sh
   assert.match(html, /SHORT=\{libre:'LIBRE',clasico:'CLÁSICO'/);
   assert.match(html, /if\(k==='ol'\)return `<rect[^`]+fill="#fff"[^`]+fill="#111"/);
   assert.match(html, /cp:\['#0b3d91','#c8102e'\]/);
+});
+
+test('trophy button changes the persistent tournament selector even when rotation is locked', () => {
+  assert.match(html, /tournamentButton\.onclick=\(\)=>\{\s*const selector=document\.getElementById\('bTorneoSel'\);\s*if\(selector\)\{selector\.click\(\);return\}/);
+  assert.match(html, /TOURNAMENT_OPTIONS\.includes\(mode\)/);
 });
 
 test('empty free-tournament lanes do not show waiting-team labels', () => {

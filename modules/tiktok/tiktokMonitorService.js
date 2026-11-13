@@ -263,6 +263,7 @@ function createTikTokMonitorService({
         if (state.connection !== connection || !state.enabledEvents.has(eventName)
           || !overlayEventTypes.has(eventName)) return;
         if (wasEventAlreadyReceived(eventName, payload)) return;
+        const receivedAt = new Date().toISOString();
         const summary = summarizeEvent(eventName, payload);
         const username = eventAuthor(payload);
         const displayName = eventDisplayName(payload);
@@ -302,6 +303,10 @@ function createTikTokMonitorService({
           ...(activityCount === undefined ? {} : { activityCount }),
           ...(diamondCount === undefined ? {} : { diamondCount }),
         });
+        entry.lifecycle = [
+          { stage: 'connector_received', time: receivedAt, event: eventName },
+          { stage: 'normalized', time: entry.time },
+        ];
 
         for (const listener of activityListeners) listener(entry);
         eventFeedStore.push(entry);

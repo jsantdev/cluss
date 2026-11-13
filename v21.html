@@ -1123,7 +1123,9 @@ function push(i,type,n=1,mult=1){
 }
 /* Fin de carrera: bloquea botones, muestra al ganador y programa la siguiente carrera (9 s) */
 function win(i){
+ if(over)return;
  over=true;update();$('#cw'+i).setAttribute('display','');
+ if(window.liveEventMonitor)window.liveEventMonitor.completeRound(T[i].id);
  document.querySelectorAll('.act,.cta').forEach(b=>b.disabled=true);
  say(`¡${T[i].n} GANA LA CARRERA!`);
  const w=$('#win'),cols=['#ffd34d','#e11d48','#3ddc5a','#5ec3f2','#fff'];
@@ -1184,14 +1186,14 @@ function handleLiveEntry(entry){
  const user=String(entry.username||'').trim().toLowerCase();
  const key=user||`anonymous-${Math.random()}`;
  let team=entry.type==='chat'?findTeam(entry.content): -1;
- if(team>=0&&user){picks.set(key,team);fanSides.set(key,team);recentChatPicks.set(key,{team,t:Date.now()})}
+ if(team>=0&&user){picks.set(key,team);recentChatPicks.set(key,{team,t:Date.now()})}
  if(entry.type==='gift'){
   const recentTeam=recentChatTeam(key);
-  team=recentTeam>=0?recentTeam:(user?supportTeamFor(key):-1);
+  team=recentTeam>=0?recentTeam:(user?window.resolveSupportTeamFor(key):-1);
   if(team<0)return;
  }
  /* El evento y el avatar del hincha siempre usan el mismo lado; solo los eventos anónimos usan el carril seleccionado. */
- if(team<0)team=user?supportTeamFor(key):sel;
+ if(team<0)team=user?window.resolveSupportTeamFor(key):sel;
  if(entry.type==='chat'){
   const now=Date.now();
   if(now-(lastChat.get(key)||0)<8000)return;
@@ -1206,6 +1208,11 @@ function handleLiveEntry(entry){
   if(type==='chat'){if(!trackTournamentMentions(entry.content))trackLaneInteraction(T[team].id)}
   else trackLaneInteraction(T[team].id,count);
  }
+ const tapCount=TAP_POLICY.tapEventDelta(type,count);
+ if(tapCount){
+  if(typeof window.recordLiveTap!=='function')throw new Error('El contador de taps del LIVE no está inicializado.');
+  window.recordLiveTap(team,tapCount);
+ }
  push(team,type,count);
 }
 /* Pinta el estado de conexion (verde conectado, naranja conectando, rojo sin conexion). Lo llaman los mensajes SSE "status" */
@@ -1216,10 +1223,202 @@ function setConnection(status){
  el.setAttribute('aria-label',`${USER}: ${connected?'en vivo':status.status==='failed'?'sin conexión':'conectando'}`);
 }
 /* Conexion con el backend: eventos reales de TikTok por SSE */
+const receivedEvents=[];
+const receivedEventListeners=new Set();
+const pendingLiveEvents=[];
+const liveEventsById=new Map();
+const supportedLiveTypes=new Set(['member','chat','gift','like','follow','share']);
+const LIVE_DIAGNOSTIC_DURATION=10*60*1000,LIVE_DIAGNOSTIC_LIMIT=5000,liveDiagnosticLog=[];
+let liveEventProcessor=null,liveSnapshotProvider=null,localEventNumber=0;
+let liveDiagnosticUntil=0,liveDiagnosticStartedAt=null,liveDiagnosticEndedAt=null,liveDiagnosticDropped=0,liveDiagnosticTimer=null;
+function notifyReceivedEvents(){receivedEventListeners.forEach(listener=>setTimeout(listener,0))}
+function setLiveDiagnosticMode(enabled){
+ if(enabled){
+  if(liveDiagnosticUntil>Date.now())return true;
+  clearTimeout(liveDiagnosticTimer);liveDiagnosticTimer=null;
+  liveDiagnosticLog.length=0;liveDiagnosticDropped=0;
+  liveDiagnosticStartedAt=new Date().toISOString();liveDiagnosticEndedAt=null;
+  liveDiagnosticUntil=Date.now()+LIVE_DIAGNOSTIC_DURATION;
+  liveDiagnosticTimer=setTimeout(()=>setLiveDiagnosticMode(false),LIVE_DIAGNOSTIC_DURATION);
+ }else if(liveDiagnosticUntil){
+  clearTimeout(liveDiagnosticTimer);liveDiagnosticTimer=null;
+  liveDiagnosticUntil=0;liveDiagnosticEndedAt=new Date().toISOString();
+ }
+ notifyReceivedEvents();
+ return liveDiagnosticUntil>Date.now();
+}
+function isLiveDiagnosticActive(){
+ if(liveDiagnosticUntil&&liveDiagnosticUntil<=Date.now())setLiveDiagnosticMode(false);
+ return liveDiagnosticUntil>Date.now();
+}
+function recordLiveDiagnostic(item,stage,details){
+ if(!isLiveDiagnosticActive())return;
+ const entry=item&&item.payload&&item.payload.entry;
+ liveDiagnosticLog.push({
+  time:new Date().toISOString(),
+  eventId:item&&item.eventId||null,
+  eventType:entry&&entry.type||item&&item.type||'unknown',
+  stage,
+  details,
+ });
+ if(liveDiagnosticLog.length>LIVE_DIAGNOSTIC_LIMIT){
+  liveDiagnosticLog.shift();liveDiagnosticDropped++;
+ }
+}
+function trimReceivedEvents(){
+ while(receivedEvents.length>100){
+  let removable=-1;
+  for(let i=receivedEvents.length-1;i>=0;i--){
+   if(receivedEvents[i].state!=='queued'&&receivedEvents[i].state!=='processing'){removable=i;break}
+  }
+  if(removable<0)break;
+  receivedEvents.splice(removable,1);
+ }
+}
+function recordReceivedEvent(type,payload){
+ const item={type,time:new Date().toLocaleTimeString(),payload,...(['update','round-complete'].includes(type)?{state:'queued'}:{})};
+ receivedEvents.unshift(item);
+ if(type!=='update')recordLiveDiagnostic(item,'received',{payload});
+ trimReceivedEvents();
+ notifyReceivedEvents();
+ return item;
+}
+function addLiveEventStage(item,stage,details={}){
+ item.lifecycle.push({stage,time:new Date().toISOString(),...details});
+ recordLiveDiagnostic(item,stage,details);
+}
+function getLiveDiagnosticState(){
+ const active=isLiveDiagnosticActive();
+ return {
+  active,
+  startedAt:liveDiagnosticStartedAt,
+  endedAt:liveDiagnosticEndedAt,
+  expiresAt:active?new Date(liveDiagnosticUntil).toISOString():null,
+  limit:LIVE_DIAGNOSTIC_LIMIT,
+  count:liveDiagnosticLog.length,
+  dropped:liveDiagnosticDropped,
+ };
+}
+function getLiveDiagnosticLog(){
+ return {
+  ...getLiveDiagnosticState(),
+  entries:liveDiagnosticLog.map(entry=>({...entry})),
+ };
+}
+function snapshotLiveState(){return liveSnapshotProvider?liveSnapshotProvider():null}
+function processLiveEvent(item){
+ if(!liveEventProcessor||item.state!=='queued')return;
+ const entry=item.payload&&item.payload.entry;
+ const valid=Boolean(entry&&typeof entry==='object'&&typeof entry.type==='string'&&supportedLiveTypes.has(entry.type));
+ const reason=!entry||typeof entry!=='object'||typeof entry.type!=='string'
+  ?'El evento no contiene una entrada válida.'
+  :!supportedLiveTypes.has(entry.type)?'Tipo de evento no soportado por el overlay.':'';
+ addLiveEventStage(item,'validation',{valid,...(reason?{reason}:{})});
+ if(!valid){
+  item.state='ignored';item.reason=reason;
+  trimReceivedEvents();notifyReceivedEvents();return;
+ }
+ item.state='processing';
+ addLiveEventStage(item,'dispatch',{status:'started'});
+ try{
+  const before=snapshotLiveState();
+  liveEventProcessor(entry);
+  const after=snapshotLiveState();
+  item.result=before&&after?{
+   statsDelta:Object.fromEntries(Object.keys(after.stats).map(key=>[key,after.stats[key]-(before.stats[key]||0)])),
+   taps:after.taps.map((tap,index)=>{
+    const previous=before.taps[index];
+    return {team:tap.team,before:previous?previous.value:0,after:tap.value,delta:tap.value-(previous?previous.value:0),limit:tap.limit};
+   })
+  }:null;
+  item.state='processed';
+  addLiveEventStage(item,'dispatch',{status:'completed'});
+  addLiveEventStage(item,'result',{result:item.result});
+ }catch(error){
+  item.state='error';
+  item.error=error&&typeof error.message==='string'?error.message:String(error);
+  addLiveEventStage(item,'dispatch',{status:'failed'});
+  addLiveEventStage(item,'error',{
+   message:item.error,
+   ...(isLiveDiagnosticActive()&&error&&error.stack?{stack:error.stack}:{}),
+  });
+  if(isLiveDiagnosticActive())console.error('No se pudo procesar un evento del LIVE.',error);
+ }
+ trimReceivedEvents();
+ notifyReceivedEvents();
+}
+function receiveLiveEvent(payload){
+ const entry=payload&&payload.entry;
+ const sourceId=entry&&typeof entry==='object'&&entry.id?String(entry.id):'';
+ if(sourceId&&liveEventsById.has(sourceId)){
+  const duplicate=liveEventsById.get(sourceId);
+  addLiveEventStage(duplicate,'duplicate',{ignored:true});
+  notifyReceivedEvents();
+  return duplicate;
+ }
+ const item=recordReceivedEvent('update',payload);
+ item.eventId=sourceId||'sse-'+(++localEventNumber);
+ item.lifecycle=entry&&Array.isArray(entry.lifecycle)?entry.lifecycle.slice():[];
+ item.lifecycle.forEach(stage=>recordLiveDiagnostic(item,stage.stage,stage));
+ addLiveEventStage(item,'sse_received',{payload});
+ item.state='queued';
+ addLiveEventStage(item,'queued',{reason:liveEventProcessor?'Pendiente de procesamiento.':'Esperando que el overlay termine de inicializarse.'});
+ if(sourceId){
+  liveEventsById.set(sourceId,item);
+  if(liveEventsById.size>5000)liveEventsById.delete(liveEventsById.keys().next().value);
+ }
+ if(liveEventProcessor){
+  processLiveEvent(item);return item;
+ }else{
+  pendingLiveEvents.push(item);
+ }
+ notifyReceivedEvents();
+ return item;
+}
+window.liveEventMonitor={
+ events:receivedEvents,
+ subscribe(listener){receivedEventListeners.add(listener);return()=>receivedEventListeners.delete(listener)},
+ clear(){receivedEvents.length=0;liveDiagnosticLog.length=0;liveDiagnosticDropped=0;notifyReceivedEvents()},
+ receive:receiveLiveEvent,
+ setDiagnosticMode:setLiveDiagnosticMode,
+ getDiagnosticState:getLiveDiagnosticState,
+ getDiagnosticLog:getLiveDiagnosticLog,
+ setSnapshotProvider(provider){liveSnapshotProvider=provider},
+ registerProcessor(processor){
+  if(typeof processor!=='function')throw new Error('El procesador de eventos LIVE debe ser una función.');
+  if(liveEventProcessor&&liveEventProcessor!==processor)throw new Error('El procesador de eventos LIVE ya fue registrado.');
+  liveEventProcessor=processor;
+  while(pendingLiveEvents.length)processLiveEvent(pendingLiveEvents.shift());
+ },
+ async completeRound(winner){
+  const item=recordReceivedEvent('round-complete',{winner});
+  item.state='processing';
+  addLiveEventStage(item,'dispatch',{status:'started'});
+  try{
+   if(typeof window.flushClussRoundPersistence==='function')window.flushClussRoundPersistence();
+   const response=await fetch('/api/round/complete',{method:'POST'});
+   const result=await response.json();
+   if(!response.ok||!result.ok)throw new Error(result.message||'No se pudo guardar el cierre de la carrera.');
+   item.result=result;item.state='processed';
+   addLiveEventStage(item,'dispatch',{status:'completed'});
+   addLiveEventStage(item,'result',{result});
+  }catch(error){
+   item.state='error';
+   item.error=error&&typeof error.message==='string'?error.message:String(error);
+   addLiveEventStage(item,'dispatch',{status:'failed'});
+   addLiveEventStage(item,'error',{
+    message:item.error,
+    ...(isLiveDiagnosticActive()&&error&&error.stack?{stack:error.stack}:{}),
+   });
+   if(isLiveDiagnosticActive())console.error('No se pudo guardar el cierre de la carrera.',error);
+  }
+  notifyReceivedEvents();
+ }
+};
 const source=new EventSource('/api/events');
-source.addEventListener('status',event=>setConnection(JSON.parse(event.data)));
-source.addEventListener('update',event=>handleLiveEntry(JSON.parse(event.data).entry));
-source.onerror=()=>setConnection({connected:false,status:'reconnecting'});
+source.addEventListener('status',event=>{const payload=JSON.parse(event.data);setConnection(payload);recordReceivedEvent('status',payload)});
+source.addEventListener('update',event=>window.liveEventMonitor.receive(JSON.parse(event.data)));
+source.onerror=()=>{const status={connected:false,status:'reconnecting'};setConnection(status);recordReceivedEvent('connection',status)};
 fetch('/api/reconnect',{method:'POST'}).then(async response=>{
  if(!response.ok&&response.status!==409){
   const result=await response.json();
@@ -1253,13 +1452,18 @@ P.tournamentMode=tournamentMode;
 P.countryPopularity=Object.assign({},countryPopularity,P.countryPopularity||{});
 P.countryEntrants=countryEntrants;
 P.tournamentInteractions=Object.assign({},tournamentInteractions,P.tournamentInteractions||{});
-countryPopularity=P.countryPopularity;tournamentInteractions=P.tournamentInteractions;P.libreVotes=libreVotes; /* mismo objeto: los votos del chat se guardan con P */
+countryPopularity=P.countryPopularity;tournamentInteractions=P.tournamentInteractions;P.libreVotes=Object.assign({},libreVotes); /* los votos se copian al estado persistente al cerrar cada carrera */
 let svT=0,tournamentSaveTimer=0;const save=()=>{try{SRV.set('cluss.v1',P)}catch(e){}}; /* BACKEND: PUT /api/state/cluss.v1 (el cliente junta cambios, maximo 1 PUT por segundo) */
 function saveTournamentProgress(){
  P.countryPopularity=countryPopularity;P.countryEntrants=countryEntrants;P.tournamentInteractions=tournamentInteractions;
  if(tournamentSaveTimer)return;
  tournamentSaveTimer=setTimeout(()=>{tournamentSaveTimer=0;save()},1000);
 }
+window.persistTournamentRound=()=>{
+ P.libreVotes=Object.assign({},libreVotes);
+ P.countryPopularity=countryPopularity;P.countryEntrants=countryEntrants;P.tournamentInteractions=tournamentInteractions;
+ clearTimeout(tournamentSaveTimer);tournamentSaveTimer=0;save();
+};
 P.duel=DUELO.slice();P.nextRival=nextRival;P.br=BR;save();
 const tournamentButton=document.createElement('button');
 tournamentButton.className='sm';tournamentButton.id='bTournament';tournamentButton.type='button';
@@ -1398,7 +1602,7 @@ push=function(i,type,n=1,m=1){
    const gifts=TAP_POLICY.statEventDelta('gift',n),progress=TAP_POLICY.giftProgress(gifts,GIFT_PROGRESS);
    S[i].g+=gifts;S[i].p=Math.min(100,S[i].p+progress);
    lead=update();float(i,'🎁 +'+progress+'%');walk(i);giftTurboOn(i,gifts);
-  }else{const taps=TAP_POLICY.tapEventDelta(type,n);if(taps)heartAdd(i,taps)}
+  }
  }else{
   _push(i,type,n,m);
  }
@@ -1490,6 +1694,7 @@ function heartAdd(t,n){
   hype('❤️',T[t].n,' · ¡TURBO! +'+(HEART_TURBO_PROGRESS*full)+'%',T[t].c);
  }
 }
+window.recordLiveTap=(team,count)=>heartAdd(team,count);
 /* ➕ ➖ ajustan temporalmente el limite durante esta carrera. */
 function setTurboLimit(d){
  const previous=HEART_N;
@@ -1516,6 +1721,7 @@ function supportTeamFor(key){
  if(side>=0)picks.set(key,side);
  return side;
 }
+window.resolveSupportTeamFor=supportTeamFor;
 (Array.isArray(HINCHAS_JSON)?HINCHAS_JSON:[]).forEach(f=>{const r=addFan(f);if(r)picks.set(r.key,r.t)});
 function fanFor(t){const l=fanPool.filter(f=>f.t===t);return l.length?l[fanTurn%l.length]:null} /* rota un usuario del JSON por ronda */
 function eggEl(u,t,cls){ /* un avatar: foto si hay, si no la inicial; los bots llevan 🤖 */
@@ -1780,6 +1986,10 @@ function renderTop3(){
 }
 /* ===== ESTADISTICAS REALES: solo eventos del live. Los bots (bot:true) y los toques manuales no cuentan ===== */
 const ST={member:0,chat:0,gift:0,like:0,follow:0,share:0};
+window.getLiveEventSnapshot=()=>({
+ stats:{...ST},
+ taps:T.map((team,index)=>({team:team.n,value:heart[index],limit:HEART_N}))
+});
 const giftTotal=document.getElementById('giftTotal');
 const idleStat=document.createElement('div');
 idleStat.className='st';idleStat.dataset.k='idle';idleStat.title='Tiempo restante sin interacción';
@@ -3962,7 +4172,7 @@ function vote(user,ids){
  const h=uid(user);
  ids.forEach(id=>{[VS.total,VS.round].forEach(m=>{const r=m[id]||(m[id]={votes:0,u:[]});r.votes++;if(!r.u.includes(h))r.u.push(h)})});
  if(!VS.all.includes(h))VS.all.push(h);
- VS.updated=Date.now();saveV();
+ VS.updated=Date.now();
 }
 function commitRound(duel){ /* la ronda de votos termina cuando se sortea el duelo siguiente */
  const ids=Object.keys(VS.round);
@@ -3993,23 +4203,31 @@ libreDuel=function(){const d=_ld.apply(this,arguments);try{commitRound(d)}catch(
 /* tras recargar la pagina, la ronda de votos en curso sigue (menos los equipos que ya juegan) */
 try{if(!Object.keys(libreVotes).length){const playing=new Set((typeof DUELO!=='undefined'?DUELO:[]).map(libreCanon));
  Object.keys(VS.round).forEach(id=>{if(!playing.has(id)&&VS.round[id].votes>0)libreVotes[id]=VS.round[id].votes})}}catch(e){}
-window.libreArchive={vote,commitRound,data:votesObj};
+window.libreArchive={vote,commitRound,flush:()=>saveV(true),data:votesObj};
 
 /* ---------- ARCHIVO DE TEXTOS DEL CHAT (sin autor) ---------- */
 /* BACKEND: los textos del chat YA NO se guardan en el cliente: cada texto se agrega al flujo chat-texts (POST /api/log/chat-texts). El cliente solo lleva un contador; el valor inicial sale de la clave de solo lectura cluss.chatArchive = {v,created,updated,trimmed,count} que el servidor puede incluir en /api/state.js. */
 let CA=ld(K_C);
 if(!CA||typeof CA!=='object'||CA.v!==1)CA={v:1,created:Date.now(),updated:Date.now(),trimmed:0,count:0};
 CA=Object.assign({},CA,{count:+CA.count||0}); /* copia: el cliente nunca reenvia este documento */
+const pendingChatRecords=[];
 const saveC=now=>{if(now)SRV.flush(true)}; /* solo vacia la cola de envio al servidor */
-function addChat(text){const t=String(text==null?'':text).replace(/\s+/g,' ').trim().slice(0,MAX_TXT);if(!t)return;SRV.log('chat-texts',[Date.now(),t]);CA.count++;CA.updated=Date.now()}
+function addChat(text){const t=String(text==null?'':text).replace(/\s+/g,' ').trim().slice(0,MAX_TXT);if(!t)return;pendingChatRecords.push([Date.now(),t]);CA.count++;CA.updated=Date.now()}
+window.flushClussRoundPersistence=()=>{
+ pendingChatRecords.forEach(record=>SRV.log('chat-texts',record));
+ pendingChatRecords.length=0;
+ if(window.libreArchive)window.libreArchive.flush();
+ if(typeof window.persistTournamentRound==='function')window.persistTournamentRound();
+ SRV.flush(true);
+};
 const SRVCHAT_JSON='/api/log/chat-texts.json',SRVCHAT_TXT='/api/log/chat-texts.txt'; /* BACKEND: descargas del archivo completo del chat, con Content-Disposition: attachment */
 const chatJSON=()=>fetch(SRVCHAT_JSON).then(r=>r.text());
 const chatTXT=()=>fetch(SRVCHAT_TXT).then(r=>r.text());
-function clearChat(){SRV.clearLog('chat-texts');CA.count=0;CA.trimmed=0;CA.created=CA.updated=Date.now()} /* BACKEND: DELETE /api/log/chat-texts */ /* SOLO la llama el boton confirmado */
+function clearChat(){pendingChatRecords.length=0;SRV.clearLog('chat-texts');CA.count=0;CA.trimmed=0;CA.created=CA.updated=Date.now()} /* BACKEND: DELETE /api/log/chat-texts */ /* SOLO la llama el boton confirmado */
 const _hle=handleLiveEntry;
 handleLiveEntry=function(e){try{if(e&&!e.bot&&e.type==='chat')addChat(e.content)}catch(x){console.error(x)}return _hle.apply(this,arguments)};
-addEventListener('pagehide',()=>{saveV(true);saveC(true)});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){saveV(true);saveC(true)}});
+addEventListener('pagehide',()=>saveC(true));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveC(true)});
 
 /* ---------- DESCARGA ---------- */
 function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
@@ -4147,6 +4365,137 @@ setInterval(ritmo,300);ritmo();
 function sincro(){try{document.querySelectorAll('.hb .hi,#regalos .ic').forEach(el=>el.getAnimations().forEach(a=>{
  if(a.animationName==='gmHeart'||a.animationName==='gmGift'){if(a.startTime!==0)a.startTime=0}}))}catch(e){}}
 sincro();setTimeout(sincro,800);addEventListener('load',sincro);setInterval(sincro,2000);
+})();
+</script>
+<script>
+(function(){
+const store=window.liveEventMonitor,foot=document.querySelector('.foot'),app=document.getElementById('app');
+if(!store||!foot||!app)return;
+const button=document.createElement('button');
+button.type='button';button.className='sm';button.id='bLiveEvents';button.textContent='📨';
+button.title='Conectar usuario y ver eventos recibidos';button.setAttribute('aria-label','Conectar usuario y ver eventos recibidos');
+const statsButton=document.getElementById('bStat');
+if(statsButton)statsButton.after(button);else foot.appendChild(button);
+const style=document.createElement('style');
+style.textContent=`
+ #liveEventPanel{position:absolute;inset:0;z-index:210;padding:12px;background:#1b120a;color:#f3ece1;display:flex;flex-direction:column;gap:8px;font:12px/1.4 Inter,sans-serif}
+ #liveEventPanel[hidden]{display:none}
+ #liveEventPanel header{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+ #liveEventPanel header span{display:flex;gap:4px}
+ #liveDiagnosticControls{display:flex;align-items:center;gap:6px;flex-shrink:0}
+ #liveEventPanel button{font:700 12px Inter,sans-serif;color:#f3ece1;background:#3f2713;border:1px solid #6e4524;border-radius:999px;padding:5px 7px;cursor:pointer}
+ #liveEventPanel button:disabled{opacity:.45;cursor:not-allowed}
+ #liveEventPanel .connect{display:flex;gap:6px}
+ #liveEventPanel input{flex:1;min-width:0;padding:8px;border:1px solid #8a6743;border-radius:8px;background:#2a190b;color:#fff;font:14px Inter,sans-serif}
+ #liveEventPanel #liveConnection{min-height:18px;color:#d9c3a0}
+ #liveEventList{flex:1;min-height:0;overflow:auto}
+ #liveEventList details{border-bottom:1px solid #3f2713;padding:6px 2px}
+ #liveEventList summary{cursor:pointer;font-weight:700}
+ #liveEventList pre{white-space:pre-wrap;overflow-wrap:anywhere;font:10px/1.4 ui-monospace,monospace;margin:6px 0;color:#d9c3a0}
+ #liveEventList .empty{color:#a39a8b;padding:12px 2px}
+`;
+document.head.appendChild(style);
+const panel=document.createElement('section');
+panel.id='liveEventPanel';panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Conexión y eventos recibidos');
+panel.innerHTML='<header><b>📨 Conexión y eventos <span id="liveEventCount">0</span></b><span><button id="clearLiveEvents" type="button">Limpiar</button><button id="closeLiveEvents" type="button" aria-label="Cerrar">✕</button></span></header><div id="liveDiagnosticControls"><button id="toggleLiveLog" type="button" aria-pressed="false" title="Capturar el recorrido detallado durante 10 minutos">🧪 Log</button><button id="copyLiveLog" type="button" aria-label="Copiar log" title="Copiar log" disabled>📋 Copiar</button></div><form class="connect"><input id="liveUsername" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Usuario de TikTok (sin @)" aria-label="Usuario de TikTok"><button id="connectLiveUser" type="submit">Conectar</button></form><div id="liveConnection" role="status" aria-live="polite">Esperando conexión…</div><div id="livePipeline" role="status" aria-live="polite"></div><div id="liveEventList" aria-live="polite"></div>';
+app.appendChild(panel);
+const input=panel.querySelector('#liveUsername'),form=panel.querySelector('form'),connection=panel.querySelector('#liveConnection'),list=panel.querySelector('#liveEventList');
+const diagnosticButton=panel.querySelector('#toggleLiveLog'),copyLogButton=panel.querySelector('#copyLiveLog');
+let editing=false;
+function updateDiagnosticControls(){
+ const diagnostic=store.getDiagnosticState(),remaining=diagnostic.active?Math.max(0,Math.ceil((Date.parse(diagnostic.expiresAt)-Date.now())/1000)):0;
+ const clock=`${String(Math.floor(remaining/60)).padStart(2,'0')}:${String(remaining%60).padStart(2,'0')}`;
+ diagnosticButton.textContent=diagnostic.active?`🧪 ${clock}`:'🧪 Log';
+ diagnosticButton.setAttribute('aria-pressed',String(diagnostic.active));
+ diagnosticButton.title=diagnostic.active?`Registro activo; se apaga en ${clock}.`:'Capturar el recorrido detallado durante 10 minutos.';
+ diagnosticButton.setAttribute('aria-label',diagnostic.active?`Desactivar registro detallado; quedan ${clock}`:'Activar registro detallado durante 10 minutos');
+ copyLogButton.disabled=diagnostic.count===0;
+ copyLogButton.title=diagnostic.count?`Copiar ${diagnostic.count} pasos del log`:'Activa el log temporal para capturar pasos';
+}
+function copyText(text){
+ const textarea=document.createElement('textarea');
+ textarea.value=text;textarea.setAttribute('readonly','');textarea.style.position='fixed';textarea.style.opacity='0';
+ document.body.appendChild(textarea);textarea.select();
+ const copied=typeof document.execCommand==='function'&&document.execCommand('copy');
+ textarea.remove();
+ if(!copied)throw new Error('El navegador no permitió copiar al portapapeles.');
+}
+async function copyDiagnosticLog(){
+ const diagnostic=store.getDiagnosticLog();
+ if(!diagnostic.entries.length){connection.textContent='No hay pasos registrados. Activa el log temporal para capturarlos.';return}
+ try{
+  const text=JSON.stringify(diagnostic,null,2);
+  if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function'){
+   try{await navigator.clipboard.writeText(text)}catch(error){copyText(text)}
+  }else copyText(text);
+  connection.textContent=`Log copiado (${diagnostic.entries.length} pasos).`;
+ }catch(error){
+  connection.textContent=`No se pudo copiar el log: ${error.message}`;
+ }
+}
+function render(){
+ const events=store.events;
+ panel.querySelector('#liveEventCount').textContent=String(events.length);
+ const updates=events.filter(item=>item.type==='update');
+ const queued=updates.filter(item=>item.state==='queued').length;
+ const processing=updates.filter(item=>item.state==='processing').length;
+ const processed=updates.filter(item=>item.state==='processed').length;
+ const errors=updates.filter(item=>item.state==='error').length;
+ const diagnostic=store.getDiagnosticState();
+ const diagnosticText=diagnostic.active?` · log detallado activo ${Math.ceil((Date.parse(diagnostic.expiresAt)-Date.now())/1000)}s`:'';
+ panel.querySelector('#livePipeline').textContent=`LIVE recibidos: ${updates.length} · en cola: ${queued} · procesando: ${processing} · procesados: ${processed} · errores: ${errors}${diagnosticText}`;
+ updateDiagnosticControls();
+ const latestStatus=events.find(item=>item.type==='status');
+ const latestConnection=events.find(item=>item.type==='status'||item.type==='connection');
+ if(latestConnection){
+  const state=latestConnection.payload,username=String(state.username||(latestStatus&&latestStatus.payload.username)||'').replace(/^@+/,'');
+  if(username&&!editing&&document.activeElement!==input)input.value=username;
+  const connected=Boolean(state.connected||state.isConnected);
+  const stateText=connected?'Conectado':state.status==='connecting'||state.status==='reconnecting'?'Conectando':'Desconectado';
+  connection.textContent=`${username?'@'+username+' · ':''}${state.error?'Error: '+state.error:stateText}`;
+ }
+ list.replaceChildren();
+ if(!events.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='Aún no se reciben eventos. Escribe el usuario del live y pulsa Conectar.';list.appendChild(empty);return}
+ for(const item of events){
+  const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');
+  const eventType=item.payload&&item.payload.entry&&item.payload.entry.type;
+  summary.textContent=`${item.time} · ${eventType||item.type}${item.state?' · '+item.state:''}`;
+  const detail=item.type==='update'
+   ?{eventId:item.eventId,state:item.state,reason:item.reason,error:item.error,lifecycle:item.lifecycle,result:item.result,payload:item.payload}
+   :item.payload;
+  pre.textContent=JSON.stringify(detail,null,2);
+  details.append(summary,pre);list.appendChild(details);
+ }
+}
+store.subscribe(()=>{if(!panel.hidden)render()});
+setInterval(()=>{if(!panel.hidden)updateDiagnosticControls()},1000);
+store.setSnapshotProvider(()=>window.getLiveEventSnapshot());
+const registerLiveProcessor=()=>store.registerProcessor(entry=>handleLiveEntry(entry));
+if(document.readyState==='complete')registerLiveProcessor();
+else window.addEventListener('load',registerLiveProcessor,{once:true});
+button.addEventListener('click',()=>{panel.hidden=false;render();input.focus()});
+panel.querySelector('#closeLiveEvents').addEventListener('click',()=>{panel.hidden=true});
+panel.querySelector('#clearLiveEvents').addEventListener('click',()=>store.clear());
+diagnosticButton.addEventListener('click',()=>store.setDiagnosticMode(!store.getDiagnosticState().active));
+copyLogButton.addEventListener('click',copyDiagnosticLog);
+input.addEventListener('input',()=>{editing=true});
+form.addEventListener('submit',async event=>{
+ event.preventDefault();
+ const username=input.value.trim().replace(/^@+/,'');
+ if(!username){connection.textContent='Escribe un usuario de TikTok.';input.focus();return}
+ const submit=form.querySelector('button[type="submit"]');
+ submit.disabled=true;connection.textContent=`Solicitando conexión con @${username}…`;
+ try{
+  const response=await fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.message||'No se pudo conectar con ese usuario.');
+  input.value=result.username;editing=false;
+  connection.textContent=`Conectando con @${result.username}…`;
+ }catch(error){connection.textContent=error.message}
+ finally{submit.disabled=false}
+});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!panel.hidden)panel.hidden=true});
+render();
 })();
 </script>
 </body>

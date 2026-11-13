@@ -70,7 +70,10 @@ test('statistics bar updates from real events and renders the live tap and idle 
 });
 
 test('real tap, turbo, and gift calculations run through the browser activity policy', () => {
-  assert.match(html, /TAP_POLICY\.tapEventDelta\(type,n\)/);
+  assert.match(html, /const tapCount=TAP_POLICY\.tapEventDelta\(type,count\)/);
+  assert.match(html, /window\.recordLiveTap\(team,tapCount\)/);
+  assert.match(html, /window\.recordLiveTap=\(team,count\)=>heartAdd\(team,count\)/);
+  assert.doesNotMatch(html, /const taps=TAP_POLICY\.tapEventDelta\(type,n\)/);
   assert.match(html, /TAP_POLICY\.consumeTapCount\(heart\[t\],n,HEART_N\)/);
   assert.match(html, /TAP_POLICY\.giftProgress\(gifts,GIFT_PROGRESS\)/);
   assert.match(html, /TAP_POLICY\.giftTurboDuration\(count,GIFT_TURBO_MS\)/);
@@ -80,9 +83,10 @@ test('real tap, turbo, and gift calculations run through the browser activity po
 test('fan avatars and their live events use the same left or right side', () => {
   assert.match(html, /function supportTeamFor\(key\)/);
   assert.match(html, /TAP_POLICY\.resolveSupportSide\(key,T\.length,picks\.get\(key\),fanSides\.get\(key\)\)/);
-  assert.match(html, /fanSides\.set\(key,team\)/);
-  assert.match(html, /team=user\?supportTeamFor\(key\):sel/);
-  assert.match(html, /recentTeam>=0\?recentTeam:\(user\?supportTeamFor\(key\):-1\)/);
+  assert.match(html, /window\.resolveSupportTeamFor=supportTeamFor/);
+  assert.match(html, /team=user\?window\.resolveSupportTeamFor\(key\):sel/);
+  assert.match(html, /recentTeam>=0\?recentTeam:\(user\?window\.resolveSupportTeamFor\(key\):-1\)/);
+  assert.doesNotMatch(html, /picks\.set\(key,team\);fanSides\.set\(key,team\)/);
 });
 
 test('large bottom-right gift count mirrors the real gift statistic without an icon', () => {

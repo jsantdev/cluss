@@ -97,6 +97,22 @@ test('serves v21 as the main Cluss TikTok overlay', async (t) => {
     assert.match(servedHtml, /new EventSource\('\/api\/events'\)/);
     assert.match(servedHtml, /source\.addEventListener\('status'/);
     assert.match(servedHtml, /source\.addEventListener\('update'/);
+    assert.match(servedHtml, /button\.id='bLiveEvents'/);
+    assert.match(servedHtml, /fetch\('\/api\/connect'/);
+    assert.match(servedHtml, /recordReceivedEvent\('update'/);
+    assert.match(servedHtml, /window\.addEventListener\('load',registerLiveProcessor,\{once:true\}\)/);
+    assert.match(servedHtml, /addLiveEventStage\(item,'validation'/);
+    assert.match(servedHtml, /addLiveEventStage\(item,'dispatch'/);
+    assert.match(servedHtml, /addLiveEventStage\(item,'result'/);
+    assert.match(servedHtml, /liveEventsById\.has\(sourceId\)/);
+    assert.match(servedHtml, /window\.getLiveEventSnapshot=\(\)=>/);
+    assert.match(servedHtml, /LIVE_DIAGNOSTIC_DURATION=10\*60\*1000/);
+    assert.match(servedHtml, /id="toggleLiveLog"/);
+    assert.match(servedHtml, /id="copyLiveLog"/);
+    assert.match(servedHtml, /navigator\.clipboard\.writeText/);
+    assert.match(servedHtml, /if\(!isLiveDiagnosticActive\(\)\)return/);
+    assert.match(servedHtml, /window\.liveEventMonitor\.completeRound\(T\[i\]\.id\)/);
+    assert.match(servedHtml, /pendingChatRecords\.push/);
     assert.match(servedHtml, /<script src="\/api\/state\.js"><\/script>/);
     assert.match(servedHtml, /window\.SRV=/);
     assert.match(servedHtml, /SRV\.log\('user-events'/);
@@ -167,7 +183,8 @@ test('forwards normalized TikTok updates in the shape consumed by v21', async ()
       monitorService.emit({ type: 'chat', username: 'ana', content: 'Cerro Porteño' });
       const initialStats = await fetch(`${baseUrl}/api/free-tournament/stats`).then((response) => response.json());
       assert.equal(initialStats.enabled, true, 'free voting is enabled by default');
-      assert.equal(initialStats.teams[0].votes, 1);
+      assert.equal(initialStats.teams.length, 0, 'votes remain pending until the race finishes');
+      assert.equal(fs.existsSync(path.join(directory, 'free-tournament.json')), false);
 
       const disabled = await fetch(`${baseUrl}/api/free-tournament/mode`, {
         method: 'PUT',
@@ -184,6 +201,15 @@ test('forwards normalized TikTok updates in the shape consumed by v21', async ()
       }).then((response) => response.json());
       assert.equal(enabled.enabled, true);
       monitorService.emit({ type: 'chat', username: 'ana', content: 'Vamos Cerro Porteño hoy' });
+
+      const beforeFinish = await fetch(`${baseUrl}/api/comment-archive`).then((response) => response.json());
+      assert.equal(beforeFinish.comments.length, 0, 'comments remain pending until the race finishes');
+      const completedRound = await fetch(`${baseUrl}/api/round/complete`, { method: 'POST' });
+      assert.equal((await completedRound.json()).stored, 3);
+      assert.equal(
+        JSON.parse(fs.readFileSync(path.join(directory, 'free-tournament.json'), 'utf8')).teams[0].votes,
+        2,
+      );
 
       const votes = await fetch(`${baseUrl}/api/free-tournament/stats`).then((response) => response.json());
       assert.deepEqual(votes.teams.map(({ name, votes: total, users }) => ({ name, votes: total, users })), [
@@ -245,8 +271,22 @@ test('forwards normalized TikTok updates in the shape consumed by v21', async ()
     monitorService.emit(entry);
     const update = await readEvent(reader, 'update');
     const payload = JSON.parse(update.match(/event: update\ndata: (.+)\n/)[1]);
-    assert.deepEqual(payload, { entry });
+    assert.deepEqual(payload.entry, {
+      ...entry,
+      lifecycle: payload.entry.lifecycle,
+    });
+    assert.deepEqual(payload.entry.lifecycle.map(({ stage }) => stage), [
+      'backend_received',
+      'sse_published',
+    ]);
 
+    const pendingStats = await fetch(`${baseUrl}/api/comment-stats`).then((response) => response.json());
+    assert.equal(pendingStats.total, 0, 'comments are not persisted before the race finishes');
+    assert.equal(fs.existsSync(path.join(directory, 'comments-archive.json')), false);
+    const completedRound = await fetch(`${baseUrl}/api/round/complete`, { method: 'POST' });
+    assert.equal((await completedRound.json()).stored, 1);
+    const emptyCompletion = await fetch(`${baseUrl}/api/round/complete`, { method: 'POST' });
+    assert.equal((await emptyCompletion.json()).stored, 0, 'finishing twice does not persist the same comments again');
     const stats = await fetch(`${baseUrl}/api/comment-stats`).then((response) => response.json());
     assert.equal(stats.total, 1);
     assert.equal(stats.teams.find((team) => team.code === 'AR').comments, 1);
@@ -277,6 +317,24 @@ test('forwards normalized TikTok updates in the shape consumed by v21', async ()
         .users.map((user) => user.username),
       ['new-viewer'],
     );
+
+    const manualConnection = await fetch(`${baseUrl}/api/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: '@test-channel' }),
+    });
+    assert.deepEqual(await manualConnection.json(), { ok: true, username: 'test-channel' });
+    assert.equal(monitorService.state.username, 'test-channel');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(directory, 'config.json'), 'utf8')), {
+      username: 'race-host',
+    }, 'manual test connections must not change the saved configuration');
+
+    const invalidManualConnection = await fetch(`${baseUrl}/api/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: '   ' }),
+    });
+    assert.equal(invalidManualConnection.status, 400);
   } finally {
     if (reader) await reader.cancel();
     await close(server);

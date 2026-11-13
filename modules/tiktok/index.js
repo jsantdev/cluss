@@ -39,6 +39,7 @@ function createTikTokModule({
   });
   let username = environmentUsername;
   const events = [];
+  const pendingCommentEvents = [];
   const state = {
     connected: Boolean(monitorService.state.isConnected),
     status: monitorService.state.status,
@@ -65,22 +66,29 @@ function createTikTokModule({
 
   function handleEvent(entry) {
     if (!entry || typeof entry !== 'object' || typeof entry.type !== 'string') return;
-    events.unshift(entry);
+    const eventEntry = {
+      ...entry,
+      lifecycle: [
+        ...(Array.isArray(entry.lifecycle) ? entry.lifecycle : []),
+        { stage: 'backend_received', time: new Date().toISOString() },
+      ],
+    };
+    events.unshift(eventEntry);
     events.length = Math.min(events.length, maxEvents);
-    state.lastEventAt = entry.time || new Date().toISOString();
-    if (entry.type === 'member') {
-      recentUsers.rememberConnectedUser(entry);
-    } else if (entry.avatar) {
-      recentUsers.updateRecentUserAvatar(entry);
+    state.lastEventAt = eventEntry.time || new Date().toISOString();
+    if (eventEntry.type === 'member') {
+      recentUsers.rememberConnectedUser(eventEntry);
+    } else if (eventEntry.avatar) {
+      recentUsers.updateRecentUserAvatar(eventEntry);
     }
-    if (entry.type === 'chat') {
-      const stats = commentStats.recordComment(entry.content);
-      publish('comment-stats', stats);
-      publish('comment-archive-stats', commentArchive.recordComment(entry.content, entry.time));
-      const freeStats = freeTournament.recordComment(entry);
-      if (freeStats) publish('free-tournament-stats', freeStats);
+    if (eventEntry.type === 'chat') {
+      pendingCommentEvents.push({
+        entry: eventEntry,
+        freeVotingEnabled: freeTournament.getStats().enabled,
+      });
     }
-    publish('update', { entry });
+    eventEntry.lifecycle.push({ stage: 'sse_published', time: new Date().toISOString() });
+    publish('update', { entry: eventEntry });
   }
 
   function getCommentStats() {
@@ -116,6 +124,31 @@ function createTikTokModule({
 
   function getCommentArchiveText() {
     return commentArchive.getTextExport();
+  }
+
+  function completeRound() {
+    const stored = pendingCommentEvents.length;
+    let stats = null;
+    let archive = null;
+    let freeStats = null;
+    for (const { entry, freeVotingEnabled } of pendingCommentEvents) {
+      stats = commentStats.recordComment(entry.content);
+      archive = commentArchive.recordComment(entry.content, entry.time);
+      const recordedFreeStats = freeTournament.recordComment(entry, freeVotingEnabled);
+      if (recordedFreeStats) freeStats = recordedFreeStats;
+    }
+    if (pendingCommentEvents.length) {
+      commentArchive.flush();
+      pendingCommentEvents.length = 0;
+      publish('comment-stats', stats);
+      publish('comment-archive-stats', archive);
+      if (freeStats) publish('free-tournament-stats', freeStats);
+    }
+    return {
+      ok: true,
+      stored,
+      stats: getCommentStats(),
+    };
   }
 
   function resetCommentArchive() {
@@ -166,6 +199,17 @@ function createTikTokModule({
     return { ok: true, username };
   }
 
+  function connectToUser(value) {
+    const nextUsername = typeof value === 'string' ? value.trim().replace(/^@+/, '') : '';
+    if (!nextUsername) {
+      return { ok: false, message: 'Ingresa un usuario de TikTok válido.' };
+    }
+    monitorService.connectUser(nextUsername);
+    username = nextUsername;
+    state.username = nextUsername;
+    return { ok: true, username: nextUsername };
+  }
+
   function reconnect() {
     if (!username) {
       return { ok: false, status: 409, message: 'Primero configura un usuario de TikTok.' };
@@ -200,6 +244,8 @@ function createTikTokModule({
       resetCommentArchive,
       recordCup,
       saveConfiguration,
+      connectToUser,
+      completeRound,
       reconnect,
       openEventStream,
     });

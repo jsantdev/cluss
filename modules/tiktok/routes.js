@@ -12,6 +12,8 @@ function registerTikTokRoutes(app, {
   resetCommentArchive,
   recordCup,
   saveConfiguration,
+  connectToUser,
+  completeRound,
   reconnect,
   openEventStream,
 }) {
@@ -84,6 +86,19 @@ function registerTikTokRoutes(app, {
       return;
     }
     response.json(result);
+  });
+
+  app.post('/api/connect', (request, response) => {
+    const result = connectToUser(request.body?.username);
+    if (!result.ok) {
+      response.status(400).json(result);
+      return;
+    }
+    response.json(result);
+  });
+
+  app.post('/api/round/complete', (request, response) => {
+    response.json(completeRound());
   });
 
   app.post('/api/reconnect', (request, response) => {

@@ -105,8 +105,8 @@ function createFreeTournamentService({ filePath }) {
     return getStats();
   }
 
-  function recordComment(entry) {
-    if (!enabled || !entry || entry.type !== 'chat'
+  function recordComment(entry, enabledAtReceipt = enabled) {
+    if (!enabledAtReceipt || !entry || entry.type !== 'chat'
       || typeof entry.username !== 'string' || !entry.username.trim()
       || typeof entry.content !== 'string') return null;
     const text = entry.content.trim().replace(/\s+/g, ' ');

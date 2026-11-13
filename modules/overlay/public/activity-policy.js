@@ -3,15 +3,40 @@
   if (typeof module === 'object' && module.exports) module.exports = policy;
   root.TORTUWORLD_ACTIVITY_POLICY = policy;
 })(globalThis, function () {
+  const interactionTypes = new Set(['chat', 'gift', 'like', 'follow', 'share']);
+  const statTypes = new Set(['member', 'chat', 'gift', 'like', 'follow', 'share']);
+  const tapWeights = Object.freeze({ member: 1, chat: 10, like: 1, follow: 3, share: 5 });
+  const eventCount = (activityCount) => {
+    const count = Number(activityCount);
+    return Number.isFinite(count) && count > 0 ? Math.max(1, Math.floor(count)) : 1;
+  };
+  const statEventDelta = (type, activityCount) => {
+    if (!statTypes.has(type)) return 0;
+    return type === 'gift' || type === 'like' ? eventCount(activityCount) : 1;
+  };
   return Object.freeze({
     isInteractionEvent(type) {
-      return ['chat', 'gift', 'like', 'follow', 'share'].includes(type);
+      return interactionTypes.has(type);
     },
-    statEventDelta(type, activityCount) {
-      if (!['member', 'chat', 'gift', 'like', 'follow', 'share'].includes(type)) return 0;
-      if (type !== 'gift' && type !== 'like') return 1;
-      const count = Number(activityCount);
-      return Number.isFinite(count) && count > 0 ? Math.max(1, Math.floor(count)) : 1;
+    tapEventDelta(type, activityCount) {
+      const weight = Object.hasOwn(tapWeights, type) ? tapWeights[type] : 0;
+      if (!weight) return 0;
+      return weight * eventCount(activityCount);
+    },
+    statEventDelta,
+    consumeTapCount(current, added, limit) {
+      const value = Number(limit);
+      const threshold = Math.floor(value);
+      if (!Number.isFinite(threshold) || threshold < 1) return { remaining: 0, activations: 0 };
+      const total = Math.max(0, Math.floor(Number(current) || 0))
+        + Math.max(0, Math.floor(Number(added) || 0));
+      return { remaining: total % threshold, activations: Math.floor(total / threshold) };
+    },
+    giftProgress(activityCount, progressPerGift) {
+      return statEventDelta('gift', activityCount) * progressPerGift;
+    },
+    giftTurboDuration(activityCount, durationPerGift) {
+      return statEventDelta('gift', activityCount) * durationPerGift;
     },
     formatStatCount(value) {
       const count = Math.max(0, Math.floor(Number(value) || 0));

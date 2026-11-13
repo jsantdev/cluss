@@ -13,6 +13,17 @@ test('free tournament is the default locked mode and can be manually unlocked', 
   assert.match(html, /SRV\.set\('cluss\.torneoLock',lock\|\|'auto'\)/);
 });
 
+test('classic mode creates a fixed Olimpia versus Cerro tournament with their shirt-color flags', () => {
+  assert.match(html, /TOURNAMENT_MODES=\['libre','clasico'/);
+  assert.match(html, /clasico:'CLÁSICO OLIMPIA VS CERRO'/);
+  assert.match(html, /if\(mode==='clasico'\)return\['ol','cp'\]/);
+  assert.match(html, /bracketFrom\(mode==='clasico'\?ids:ids\.slice\(\)\.sort/);
+  assert.match(html, /FINAL CLÁSICA/);
+  assert.match(html, /SHORT=\{libre:'LIBRE',clasico:'CLÁSICO'/);
+  assert.match(html, /if\(k==='ol'\)return `<rect[^`]+fill="#fff"[^`]+fill="#111"/);
+  assert.match(html, /cp:\['#0b3d91','#c8102e'\]/);
+});
+
 test('empty free-tournament lanes do not show waiting-team labels', () => {
   assert.doesNotMatch(html, /ESPERANDO EQUIPO|esperando equipo/);
   assert.match(html, /function libreDuel\(\)/);
@@ -45,11 +56,19 @@ test('statistics bar exposes all six LIVE event counters and both dynamic indica
 });
 
 test('statistics bar updates from real events and renders the live tap and idle values', () => {
-  assert.match(html, /if\(e&&!e\.bot&&e\.type in ST\)/);
+  assert.match(html, /if\(e&&!e\.bot\)\{\s*const n=TAP_POLICY\.statEventDelta\(e\.type,e\.activityCount\)/);
   assert.match(html, /TAP_POLICY\.isInteractionEvent\(e\.type\)/);
   assert.match(html, /stFmt\(HEART_N\)/);
   assert.match(html, /const lim=idleLimitMs\(\),seconds=Math\.max/);
   assert.match(html, /ST\[e\.type\]\+=n/);
+});
+
+test('real tap, turbo, and gift calculations run through the browser activity policy', () => {
+  assert.match(html, /TAP_POLICY\.tapEventDelta\(type,n\)/);
+  assert.match(html, /TAP_POLICY\.consumeTapCount\(heart\[t\],n,HEART_N\)/);
+  assert.match(html, /TAP_POLICY\.giftProgress\(gifts,GIFT_PROGRESS\)/);
+  assert.match(html, /TAP_POLICY\.giftTurboDuration\(count,GIFT_TURBO_MS\)/);
+  assert.match(html, /LS\.set\(ST_KEY,rest\)/);
 });
 
 test('fan avatars and their live events use the same left or right side', () => {

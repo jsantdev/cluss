@@ -542,6 +542,7 @@ background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.4)),r
                                                                    Historial completo por usuario. El cliente solo conserva en RAM una ventana corta (60 usuarios x 60 eventos) para el panel 📊.
  Privacidad: chat-texts no lleva autor; cluss.libreVotes guarda huellas con sal, no nombres. user-events SI lleva el nombre: tratarlo como dato personal (retencion limitada, acceso restringido).
  Concurrencia: hay UN solo overlay escribiendo; el ultimo PUT gana. Si hubiera varios overlays a la vez, el servidor debe fusionar o rechazar.
+  Los calculos de taps, turbos, regalos y estadisticas se hacen en el navegador; el servidor solo persiste/entrega los documentos JSON y registra eventos recibidos.
  =================================================================================================================== -->
 <script src="/api/state.js"></script>
 <script>
@@ -594,6 +595,11 @@ document.addEventListener('visibilitychange',function(){if(document.hidden)flush
 /* v11: si /activity-policy.js no carga o le faltan funciones, se rellenan aqui (antes tiraba error y el contador no funcionaba) */
 (function(){var P=window.TORTUWORLD_ACTIVITY_POLICY=window.TORTUWORLD_ACTIVITY_POLICY||{};
  P.isInteractionEvent=P.isInteractionEvent||function(t){return['chat','like','gift','follow','share'].indexOf(t)>=0};
+ P.tapEventDelta=P.tapEventDelta||function(t,n){var w={member:1,chat:10,like:1,follow:3,share:5}[t]||0,c=+n;return w?w*(isFinite(c)&&c>0?Math.max(1,Math.floor(c)):1):0};
+ P.statEventDelta=P.statEventDelta||function(t,n){if(['member','chat','gift','like','follow','share'].indexOf(t)<0)return 0;var c=+n;return t==='gift'||t==='like'?(isFinite(c)&&c>0?Math.max(1,Math.floor(c)):1):1};
+ P.consumeTapCount=P.consumeTapCount||function(c,a,l){l=Math.floor(+l);if(!isFinite(l)||l<1)return{remaining:0,activations:0};var total=Math.max(0,Math.floor(+c||0))+Math.max(0,Math.floor(+a||0));return{remaining:total%l,activations:Math.floor(total/l)}};
+ P.giftProgress=P.giftProgress||function(n,p){return P.statEventDelta('gift',n)*p};
+ P.giftTurboDuration=P.giftTurboDuration||function(n,d){return P.statEventDelta('gift',n)*d};
  P.tapLimitStep=P.tapLimitStep||function(){return 0};
  P.inactivityTimeoutMs=P.inactivityTimeoutMs||function(){return 60000};
  P.inactivityRemainingSeconds=P.inactivityRemainingSeconds||function(i,t){return Math.max(0,Math.ceil((t-i)/1000))};
@@ -735,8 +741,8 @@ const ELITE_POOL={ /* ELITE NATIONS CUP: 8 paises */
  'el-gb':{id:'el-gb',n:'REINO UNIDO',s:'GBR',emoji:'🇬🇧',aliases:['REINO UNIDO','UK','UNITED KINGDOM','GRAN BRETAÑA','GRAN BRETANA']},'el-de':{id:'el-de',n:'ALEMANIA',s:'GER',emoji:'🇩🇪',aliases:['ALEMANIA','GERMANY']},
  'el-au':{id:'el-au',n:'AUSTRALIA',s:'AUS',emoji:'🇦🇺',aliases:['AUSTRALIA']},'el-sg':{id:'el-sg',n:'SINGAPUR',s:'SGP',emoji:'🇸🇬',aliases:['SINGAPUR','SINGAPORE']}
 };
-const TOURNAMENT_MODES=['libre','libertadores','champions','countries','america','elite']; /* 'libre' = TORNEO LIBRE: arranca activo y bloqueado; solo se sale con el boton manual 🔒 */
-const TOURNAMENT_LABELS={libre:'TORNEO LIBRE',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'COPA DEL MUNDO',america:'COPA AMÉRICA',elite:'ELITE NATIONS CUP'};
+const TOURNAMENT_MODES=['libre','clasico','libertadores','champions','countries','america','elite']; /* 'libre' = TORNEO LIBRE: arranca activo y bloqueado; solo se sale con el boton manual 🔒 */
+const TOURNAMENT_LABELS={libre:'TORNEO LIBRE',clasico:'CLÁSICO OLIMPIA VS CERRO',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'COPA DEL MUNDO',america:'COPA AMÉRICA',elite:'ELITE NATIONS CUP'};
 const COUNTRY_CHAMPIONS=['ct-ar','ct-br','ct-de','ct-es','ct-fr','ct-it','ct-uy','ct-en'];
 const COUNTRY_POPULAR_FALLBACK=['ct-py','ct-co','ct-cl','ct-mx','ct-us','ct-pt','ct-nl','ct-jp']; /* entran al Mundial si el chat aun no voto */
 let tournamentMode='libre',countryPopularity={},countryEntrants=[],tournamentInteractions={},libreVotes={},libreLast=[];
@@ -761,6 +767,7 @@ function countryTournamentIds(){
 }
 function tournamentIds(mode=tournamentMode){
  if(mode==='libre')return['libre-a','libre-b']; /* el Torneo Libre es un duelo suelto: solo importa que sean 2 puestos */
+ if(mode==='clasico')return['ol','cp'];
  if(mode==='countries'&&countryEntrants.length===16&&countryEntrants.every(id=>COUNTRY_POOL[id]))return countryEntrants;
  return Object.keys(poolForMode(mode));
 }
@@ -821,7 +828,7 @@ function libreDuel(){
 let BR=null;
 function bracketFrom(ids){const r=[ids.slice()];while(r[r.length-1].length>1)r.push(Array(r[r.length-1].length/2).fill(null));return{r}}
 function brNew(mode=tournamentMode){if(mode==='libre'){const d=libreDuel();tournamentInteractions=Object.fromEntries(d.map(id=>[id,0]));return bracketFrom(d)} /* Torneo Libre: cuadro de 1 solo partido con los 2 mas votados */
- const ids=mode==='countries'?countryTournamentIds():tournamentIds(mode);countryEntrants=mode==='countries'?ids.slice():countryEntrants;tournamentInteractions=Object.fromEntries(ids.map(id=>[id,0]));return bracketFrom(ids.slice().sort(()=>Math.random()-.5))}
+ const ids=mode==='countries'?countryTournamentIds():tournamentIds(mode);countryEntrants=mode==='countries'?ids.slice():countryEntrants;tournamentInteractions=Object.fromEntries(ids.map(id=>[id,0]));return bracketFrom(mode==='clasico'?ids:ids.slice().sort(()=>Math.random()-.5))}
 function brCur(){for(let k=0;k<BR.r.length-1;k++){const m=BR.r[k+1].indexOf(null);if(m>=0)return{k,m,duel:[BR.r[k][2*m],BR.r[k][2*m+1]]}}return null}
 function brWin(id){const c=brCur();if(c)BR.r[c.k+1][c.m]=id}
 function interactionFinalists(){
@@ -830,7 +837,7 @@ function interactionFinalists(){
   ||Number(semiWinners.includes(b))-Number(semiWinners.includes(a))
   ||entrants.indexOf(a)-entrants.indexOf(b)).slice(0,2);
 }
-function roundName(k){const total=BR.r.length-1;return total===1?'TORNEO LIBRE':total===4?['OCTAVOS DE FINAL','CUARTOS DE FINAL','SEMIFINALES','FINAL'][k]:total===3?['CUARTOS DE FINAL','SEMIFINALES','FINAL'][k]:'RONDA '+(k+1)}
+function roundName(k){const total=BR.r.length-1;return total===1?(tournamentMode==='clasico'?'FINAL CLÁSICA':'TORNEO LIBRE'):total===4?['OCTAVOS DE FINAL','CUARTOS DE FINAL','SEMIFINALES','FINAL'][k]:total===3?['CUARTOS DE FINAL','SEMIFINALES','FINAL'][k]:'RONDA '+(k+1)}
 const LEGACY_FIXTURES=[['ol','cp'],['li','ol'],['li','cp'],['gu','ol'],['gu','cp']];
 let FX=0,savedDuel=null;
 let savedNextRival=null;
@@ -843,7 +850,9 @@ try{
  if(typeof saved.nextRival==='string'&&activePool[saved.nextRival])savedNextRival=saved.nextRival;
  const ids=tournamentIds();
  if(saved.br&&Array.isArray(saved.br.r)&&saved.br.r.length>=2&&saved.br.r[0].length===ids.length
-  &&saved.br.r[0].every(k=>activePool[k])&&saved.br.r.every((r,i)=>Array.isArray(r)&&r.length===Math.max(1,ids.length/Math.pow(2,i))))BR=saved.br;
+  &&saved.br.r[0].every(k=>activePool[k])
+  &&(tournamentMode!=='clasico'||saved.br.r[0][0]==='ol'&&saved.br.r[0][1]==='cp')
+  &&saved.br.r.every((r,i)=>Array.isArray(r)&&r.length===Math.max(1,ids.length/Math.pow(2,i))))BR=saved.br;
 }catch(e){}
 if(!BR||!brCur())BR=brNew(); /* sin cuadro guardado o ya terminado: sorteo nuevo */
 savedDuel=brCur().duel;
@@ -1015,7 +1024,6 @@ document.addEventListener('toggle',e=>{const d=e.target;if(!d.matches||!d.matche
 },true);
 addEventListener('keydown',e=>{if(e.key==='Escape')stClose()});
 const PTS={share:5*HARD, /* compartir = 5 rayos */chat:10*HARD, /* comentar = 10 rayos */like:1*HARD,follow:3*HARD,gift:GIFT_PROGRESS}; /* puntos usados por los eventos automaticos del bot */
-const TAP_WEIGHTS={member:1,chat:10,like:1,follow:3,share:5};
 const TAP_POLICY=window.TORTUWORLD_ACTIVITY_POLICY;
 let sp=[1,1,1],lastTick=performance.now();
 const newSpeeds=()=>{sp=T.map(()=>0.985+Math.random()*0.03)};newSpeeds();
@@ -1382,9 +1390,10 @@ push=function(i,type,n=1,m=1){
   ach('first');
   if(type==='like')S[i].l+=n;
   if(type==='gift'){
-   S[i].g+=n;S[i].p=Math.min(100,S[i].p+GIFT_PROGRESS*n);
-   lead=update();float(i,'🎁 +'+(GIFT_PROGRESS*n)+'%');walk(i);giftTurboOn(i,n);
-  }else heartAdd(i,(TAP_WEIGHTS[type]||0)*n);
+   const gifts=TAP_POLICY.statEventDelta('gift',n),progress=TAP_POLICY.giftProgress(gifts,GIFT_PROGRESS);
+   S[i].g+=gifts;S[i].p=Math.min(100,S[i].p+progress);
+   lead=update();float(i,'🎁 +'+progress+'%');walk(i);giftTurboOn(i,gifts);
+  }else{const taps=TAP_POLICY.tapEventDelta(type,n);if(taps)heartAdd(i,taps)}
  }else{
   _push(i,type,n,m);
  }
@@ -1460,9 +1469,8 @@ function tapPop(h,n){
 /* Suma taps ponderados al contador; al completar el limite actual activa el turbo. */
 function heartAdd(t,n){
  if(over||!T[t])return;
- n=Math.max(1,Math.floor(n)||1);
- heart[t]+=n;
- let full=0;while(heart[t]>=HEART_N){heart[t]-=HEART_N;full++}
+ const {remaining,activations:full}=TAP_POLICY.consumeTapCount(heart[t],n,HEART_N);
+ heart[t]=remaining;
  renderHeart(t);
  if(full){
   lead=update();turboOn(t,HEART_TURBO_MS*full,HEART_TURBO_PPS); /* sin salto inmediato: avanza lento durante el turbo */
@@ -1783,11 +1791,12 @@ const _hleSt=handleLiveEntry;
 handleLiveEntry=function(e){
  try{if(e&&!e.bot&&['member','chat','gift','like','follow','share'].includes(e.type))stUser(e)}catch(x){console.error(x)}
  try{if(e&&!e.bot&&TAP_POLICY.isInteractionEvent(e.type)){const eventAt=Date.now();realEv.push(eventAt);lastInteractionAt=eventAt;matchInteractionCount++} /* solo interacciones, no ingresos al LIVE */
-  if(e&&!e.bot&&e.type in ST){
-  const n=(e.type==='like'||e.type==='gift')?Math.max(1,+e.activityCount||1):1;
-  ST[e.type]+=n;const el=document.querySelector('.st[data-k="'+e.type+'"]');
+  if(e&&!e.bot){
+   const n=TAP_POLICY.statEventDelta(e.type,e.activityCount);
+   if(n){ST[e.type]+=n;const el=document.querySelector('.st[data-k="'+e.type+'"]');
   if(el){el.querySelector('span').textContent=stFmt(ST[e.type]);el.classList.remove('up');void el.offsetWidth;el.classList.add('up')}
   if(e.type==='gift'&&giftTotal){giftTotal.textContent=stFmt(ST.gift);giftTotal.setAttribute('aria-label','Regalos recibidos: '+ST.gift)}
+   }
  }}catch(x){console.error(x)}
  const r=_hleSt(e);
  if(e&&!e.bot)saveTournamentProgress();
@@ -1841,7 +1850,7 @@ function finishForLowActivity(now=Date.now()){
  $('#ln'+winner).classList.add('turbo');
  S[winner].p=100;lead=update();win(winner);
 }
-function giftTurboOn(t,count){giftTurboUntil[t]=Math.max(performance.now(),giftTurboUntil[t])+GIFT_TURBO_MS*count}
+function giftTurboOn(t,count){giftTurboUntil[t]=Math.max(performance.now(),giftTurboUntil[t])+TAP_POLICY.giftTurboDuration(count,GIFT_TURBO_MS)}
 setInterval(()=>{
  if(over)return;const n=performance.now();
  T.forEach((_,i)=>{
@@ -2850,7 +2859,7 @@ pinta();setInterval(pinta,1500);
 </style>
 <script>
 (function(){
-const M=TOURNAMENT_MODES.slice(),L=TOURNAMENT_LABELS,SHORT={libre:'LIBRE',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'MUNDIAL',america:'AMÉRICA',elite:'ELITE'};
+const M=TOURNAMENT_MODES.slice(),L=TOURNAMENT_LABELS,SHORT={libre:'LIBRE',clasico:'CLÁSICO',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'MUNDIAL',america:'AMÉRICA',elite:'ELITE'};
 let lock='libre';try{const v=SRV.get('cluss.torneoLock',null);if(v==='auto')lock=null;else if(M.includes(v))lock=v}catch(e){} /* por defecto: TORNEO LIBRE bloqueado */
 const foot=document.querySelector('#topbar .foot')||document.querySelector('.foot');if(!foot)return;
 const b=document.createElement('button');b.id='bTorneoSel';b.type='button';

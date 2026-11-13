@@ -16,6 +16,30 @@ test('statistics bar counts every supported event with the right activity delta'
   assert.equal(policy.statEventDelta('share'), 1);
   assert.equal(policy.statEventDelta('unknown'), 0);
   assert.equal(policy.statEventDelta('gift', 0), 1);
+  assert.equal(policy.statEventDelta('gift', Infinity), 1);
+});
+
+test('real event tap weights are applied in the browser and gifts never add taps', () => {
+  assert.equal(policy.tapEventDelta('member', 1), 1);
+  assert.equal(policy.tapEventDelta('chat', 1), 10);
+  assert.equal(policy.tapEventDelta('like', 4), 4);
+  assert.equal(policy.tapEventDelta('follow', 1), 3);
+  assert.equal(policy.tapEventDelta('share', 1), 5);
+  assert.equal(policy.tapEventDelta('gift', 10), 0);
+  assert.equal(policy.tapEventDelta('unknown', 1), 0);
+});
+
+test('tap counter retains remainder and activates turbo once per completed threshold', () => {
+  assert.deepEqual(policy.consumeTapCount(0, 49, 50), { remaining: 49, activations: 0 });
+  assert.deepEqual(policy.consumeTapCount(49, 1, 50), { remaining: 0, activations: 1 });
+  assert.deepEqual(policy.consumeTapCount(25, 126, 50), { remaining: 1, activations: 3 });
+  assert.deepEqual(policy.consumeTapCount(25, 25, 0), { remaining: 0, activations: 0 });
+});
+
+test('each real gift advances the race and extends turbo without affecting tap count', () => {
+  assert.equal(policy.giftProgress(3, 10), 30);
+  assert.equal(policy.giftTurboDuration(3, 15000), 45000);
+  assert.equal(policy.tapEventDelta('gift', 3), 0);
 });
 
 test('statistics bar formats units consistently at thousand and million boundaries', () => {

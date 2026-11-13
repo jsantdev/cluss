@@ -62,5 +62,16 @@
       }
       return pair;
     },
+    resolveSupportSide(username, teamCount, assignedSide, configuredSide) {
+      if (!Number.isInteger(teamCount) || teamCount < 1) return -1;
+      const validSide = (side) => Number.isInteger(side) && side >= 0 && side < teamCount;
+      if (validSide(assignedSide)) return assignedSide;
+      if (validSide(configuredSide)) return configuredSide;
+      const name = String(username || '').trim().toLowerCase();
+      if (!name) return 0;
+      let hash = 0;
+      for (const character of name) hash += character.charCodeAt(0);
+      return hash % teamCount;
+    },
   });
 });

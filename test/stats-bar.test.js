@@ -51,3 +51,11 @@ test('statistics bar updates from real events and renders the live tap and idle 
   assert.match(html, /const lim=idleLimitMs\(\),seconds=Math\.max/);
   assert.match(html, /ST\[e\.type\]\+=n/);
 });
+
+test('fan avatars and their live events use the same left or right side', () => {
+  assert.match(html, /function supportTeamFor\(key\)/);
+  assert.match(html, /TAP_POLICY\.resolveSupportSide\(key,T\.length,picks\.get\(key\),fanSides\.get\(key\)\)/);
+  assert.match(html, /fanSides\.set\(key,team\)/);
+  assert.match(html, /team=user\?supportTeamFor\(key\):sel/);
+  assert.match(html, /recentTeam>=0\?recentTeam:\(user\?supportTeamFor\(key\):-1\)/);
+});

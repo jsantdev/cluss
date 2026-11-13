@@ -71,3 +71,12 @@ test('free tournament fills missing chat teams with random teams without duplica
   const twoRegistered = policy.selectFreeTournamentPair(['top-team', 'second-team'], ['fallback']);
   assert.deepEqual(twoRegistered, ['top-team', 'second-team']);
 });
+
+test('fans keep supporting their assigned side across their live events', () => {
+  assert.equal(policy.resolveSupportSide('ana', 2, 1, 0), 1);
+  assert.equal(policy.resolveSupportSide('ana', 2, -1, 1), 1);
+  assert.equal(policy.resolveSupportSide('a', 2), 1);
+  assert.equal(policy.resolveSupportSide('b', 2), 0);
+  assert.equal(policy.resolveSupportSide('a', 2), policy.resolveSupportSide('a', 2));
+  assert.equal(policy.resolveSupportSide('a', 0), -1);
+});

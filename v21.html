@@ -1173,11 +1173,14 @@ function handleLiveEntry(entry){
  const user=String(entry.username||'').trim().toLowerCase();
  const key=user||`anonymous-${Math.random()}`;
  let team=entry.type==='chat'?findTeam(entry.content): -1;
- if(team>=0&&user){picks.set(key,team);recentChatPicks.set(key,{team,t:Date.now()})}
- if(entry.type==='gift')team=recentChatTeam(key);
- /* Todo evento real carga un equipo: se conserva el equipo elegido y, si aun no hay uno, se usa el carril seleccionado. */
- if(team<0&&entry.type==='gift')return;
- if(team<0)team=picks.has(key)?picks.get(key):sel;
+ if(team>=0&&user){picks.set(key,team);fanSides.set(key,team);recentChatPicks.set(key,{team,t:Date.now()})}
+ if(entry.type==='gift'){
+  const recentTeam=recentChatTeam(key);
+  team=recentTeam>=0?recentTeam:(user?supportTeamFor(key):-1);
+  if(team<0)return;
+ }
+ /* El evento y el avatar del hincha siempre usan el mismo lado; solo los eventos anónimos usan el carril seleccionado. */
+ if(team<0)team=user?supportTeamFor(key):sel;
  if(entry.type==='chat'){
   const now=Date.now();
   if(now-(lastChat.get(key)||0)<8000)return;
@@ -1484,12 +1487,19 @@ function setTurboLimit(d){
 }
 $('#bTurboUp').onclick=()=>setTurboLimit(100);
 $('#bTurboDn').onclick=()=>setTurboLimit(-100);
-const NEST_EGGS=12,FRONT_EGGS=0,/* 0 = sin huevos grandes (quitados) */recent=T.map(()=>[]),fanPool=[];let fanTurn=0;
-const teamOf=k=>[...k].reduce((a,c)=>a+c.charCodeAt(0),0)%T.length;
+const NEST_EGGS=12,FRONT_EGGS=0,/* 0 = sin huevos grandes (quitados) */recent=T.map(()=>[]),fanPool=[],fanSides=new Map();let fanTurn=0;
+const teamOf=k=>TAP_POLICY.resolveSupportSide(k,T.length);
 function addFan(f){ /* agrega un usuario del JSON al pool y devuelve su equipo */
  const name=String(f&&(f.username||f.name)||'').trim(),key=name.toLowerCase();if(!key)return null;
- let t=T.findIndex(x=>x.id===f.team);if(t<0)t=teamOf(key);
+ const configuredSide=T.findIndex(x=>x.id===f.team),previousSide=fanSides.get(key);
+ const t=configuredSide>=0?configuredSide:previousSide!=null?previousSide:teamOf(key);
+ fanSides.set(key,t);
  fanPool.push({key,name,url:String(f.avatar||f.profilePictureUrl||''),t});return{key,t};
+}
+function supportTeamFor(key){
+ const side=TAP_POLICY.resolveSupportSide(key,T.length,picks.get(key),fanSides.get(key));
+ if(side>=0)picks.set(key,side);
+ return side;
 }
 (Array.isArray(HINCHAS_JSON)?HINCHAS_JSON:[]).forEach(f=>{const r=addFan(f);if(r)picks.set(r.key,r.t)});
 function fanFor(t){const l=fanPool.filter(f=>f.t===t);return l.length?l[fanTurn%l.length]:null} /* rota un usuario del JSON por ronda */
@@ -1560,10 +1570,9 @@ function setAvatarImage(el,url){
 function avatar(e){
  if(over||!e||!['member','chat','gift','like','follow','share'].includes(e.type))return;
  const u=String(e.username||'').trim();if(!u)return;
- const k=u.toLowerCase();let t=picks.get(k);
+ const k=u.toLowerCase(),t=supportTeamFor(k);
  const url=String(e.profilePictureUrl||e.profilePicture||e.avatarUrl||e.avatar||e.userImage||e.imageUrl||'');
  const sc=(userScore.get(k)||0)+(SCORE[e.type]||0)*(e.type==='like'?Math.max(1,Math.floor(Number(e.activityCount))||1):1);userScore.set(k,sc); /* cada evento sube su puntaje */
- if(t==null&&e.type==='member'&&k!=='sistema')t=teamOf(k); /* asignacion visual estable; no guarda equipo para el juego */
  if(t==null||!T[t]){if(e.type==='member')showEv('g','member',1,{name:u,url:url||''});return} /* se une sin equipo: avatar grande al centro, sin tocar la carrera */
  if(sc>=20&&!greeted.has(k))greet(u,t,e.displayName||u); /* saludo de Don Tortu cuando el hincha cruza los 20 puntos */
  if(!seen.has(k)){seen.add(k);grow(t,.05)}

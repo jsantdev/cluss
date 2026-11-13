@@ -27,6 +27,7 @@ El servidor no lee `.env` por sí mismo. Usa variables del entorno o administra 
 | `TIKTOK_CONFIG_PATH` | `data/tiktok/config.json` | Ruta del archivo JSON con el usuario configurado desde el backend. |
 | `TIKTOK_COMMENT_STATS_PATH` | Junto a `TIKTOK_CONFIG_PATH` | Archivo JSON persistente con comentarios y copas por país. |
 | `TIKTOK_RECENT_USERS_PATH` | Junto a `TIKTOK_CONFIG_PATH` | Archivo JSON de los últimos cuatro usuarios conectados y sus avatares. |
+| `TIKTOK_OVERLAY_DATA_PATH` | Directorio `overlay` junto a `TIKTOK_CONFIG_PATH` | Documentos del overlay, textos del chat y eventos de usuario. |
 
 Monta almacenamiento persistente si necesitas conservar la configuración del backend entre reinicios. El directorio `data/` está excluido de Git.
 
@@ -38,7 +39,13 @@ Selecciona el constructor **Dockerfile** para evitar la instalación de Nixpacks
 
 | Método y ruta | Uso | Respuesta |
 |---|---|---|
-| `GET /`, `/overlay`, `/tortugas.html`, `/tortugas_tiktok.html` o `/v2.0.html` | Overlay v10, con sus reglas y estadísticas integradas. | HTML |
+| `GET /`, `/overlay`, `/tortugas.html`, `/tortugas_tiktok.html` o `/v2.0.html` | Overlay v21; el backend implementa el contrato de persistencia declarado por el overlay. | HTML |
+| `GET /api/state.js` | Inicializa `window.CLUSS_STATE` con los documentos pequeños persistidos, sin incluir logs de rondas. | JavaScript sin caché |
+| `GET`, `PUT` o `DELETE /api/state/:clave` | Lee, guarda o borra un documento JSON del overlay; `GET` devuelve `404` si no existe. | JSON |
+| `POST /api/log/chat-texts` o `/api/log/user-events` | Agrega un lote de hasta 200 registros; los textos de chat no incluyen autor y los eventos de usuario se retienen hasta 90 días. | JSON |
+| `DELETE /api/log/chat-texts` | Vacía el archivo de comentarios. | `{ "ok": true }` |
+| `GET /api/log/chat-texts.json` o `/api/log/chat-texts.txt` | Descarga los comentarios anónimos como archivo adjunto. | Archivo |
+| `GET /api/activity-policy.js` | Sirve la política de actividad usada por el overlay. | JavaScript |
 | `GET /backend` | Configurar la cuenta y ver estadísticas de comentarios y copas por país. | HTML |
 | `GET /health` | Comprobar que el servidor responde. | `{ "ok": true }` |
 | `GET /api/status` | Estado actual y diagnóstico del conector. | JSON |
@@ -55,9 +62,9 @@ Selecciona el constructor **Dockerfile** para evitar la instalación de Nixpacks
 | `GET /api/comment-archive/stats` | Cantidad de comentarios guardados. | JSON |
 | `GET /api/comment-archive` o `/api/comment-archive.txt` | Descarga comentarios sin nombres de usuario como JSON o TXT. | Archivo |
 | `POST /api/comment-archive/reset` | Vacía el archivo de comentarios. | Envío requerido: `{ "confirm": true }`. |
-| `GET /api/events` | Flujo SSE de estado, actividad y estadísticas. | Eventos `status`, `snapshot`, `update`, `comment-stats` y `cup-stats`. |
+| `GET /api/events` | Flujo SSE consumido por v21. | Solo eventos `status` y `update`. |
 
-Un usuario vacío o inválido al guardar devuelve `400`. Los eventos `status` contienen el estado resumido; `snapshot` contiene los eventos recientes al conectar; cada `update` incluye el evento nuevo y la lista actualizada:
+Un usuario vacío o inválido al guardar devuelve `400`. El evento SSE `status` informa el estado de conexión; cada `update` contiene un único evento real dentro de `entry`, como requiere v21:
 
 ```json
 {
@@ -70,20 +77,15 @@ Un usuario vacío o inválido al guardar devuelve `400`. Los eventos `status` co
     "avatar": "",
     "content": "¡Hola!",
     "time": "2026-11-05T12:00:00.000Z"
-  },
-  "events": []
+  }
 }
 ```
 
 Los tipos dependen de los eventos que entregue TikTok; incluyen chat, regalos, likes, seguidores, compartidos, entradas y otros eventos del LIVE. `displayName` es opcional y contiene el alias visible del usuario cuando TikTok lo proporciona; `activityCount` y `diamondCount` solo aparecen cuando aplican. El conector conserva los valores del proveedor para que cada mini app decida cómo presentarlos.
 
-El overlay `v10.html` es el contrato principal de interfaz y consume por SSE los eventos reales en `/api/events`. El backend limita los eventos a los seis tipos que v10 maneja, ofrece avatares de participantes reales y no permite insertar listas arbitrarias en `/api/recent-users`; las reglas de puntuación y carrera quedan en el overlay.
+El overlay `v21.html` consume los eventos reales de `/api/events` y mantiene en el servidor el estado del juego, los votos y las estadísticas. `GET /api/state.js` solo incluye documentos pequeños; los logs de ronda se solicitan por clave cuando hacen falta. Los textos del chat se guardan como registros anónimos en `data/tiktok/overlay/logs/chat-texts.jsonl`; el flujo `user-events`, que contiene nombres, se divide por día y se elimina después de 90 días. No existe una ruta de lectura para ese historial personal.
 
-El límite de taps aumenta 50 por cada 10% de recorrido si el promedio supera 3 eventos reales por segundo, y 100 si supera 10. La barra de estadísticas muestra entradas, comentarios, regalos, likes, seguimientos, compartidos, límite de taps y cuenta regresiva fija de inactividad de 60 segundos; las entradas al LIVE no reinician el reloj. Una victoria por tiempo agotado cuenta como victoria y avanza en el cuadro, pero no suma una copa. El overlay muestra los 10 usuarios con más puntos y las tres copas principales. La versión es v1.2.2.
-
-El Torneo Libre queda activo y bloqueado por defecto; toca el control `🔒 LIBRE` para desbloquearlo y luego el botón 🏆 para cambiar de torneo. La selección manual queda guardada. El Torneo Libre registra equipos nuevos cuando un comentario contiene solo el nombre del equipo; las menciones posteriores dentro de una frase suman un voto real. Los dos más votados se aplican al comenzar la siguiente carrera; si hay menos de dos equipos del chat, los puestos restantes se sortean entre los equipos de los demás torneos. Un comentario también aporta progreso si su equipo está compitiendo. Los votos y su número de usuarios únicos se guardan en `data/tiktok/free-tournament.json`.
-
-Todos los textos de chat real se conservan aparte, sin el nombre del usuario, en `data/tiktok/comments-archive.json`. En Estadísticas → Comentarios se pueden descargar como JSON o TXT y vaciar el archivo con confirmación.
+El servidor migra una sola vez los comentarios existentes de `data/tiktok/comments-archive.json` al nuevo flujo de textos. Los documentos del overlay se guardan en `data/tiktok/overlay/state/`. El directorio `data/` debe estar en almacenamiento persistente en producción; el backend no tiene autenticación, así que limita el acceso a la aplicación con una red privada, VPN o proxy autenticado.
 
 El navegador que carga el overlay inicia la conexión con reintentos cada 5 segundos durante un máximo de 5 minutos; si se agotan, el botón rojo permite reiniciarlos manualmente. El panel `/backend` también permite iniciar la conexión al guardar la cuenta; cargar el panel o arrancar el servidor no conecta TikTok.
 
@@ -101,11 +103,13 @@ modules/
   realtime/sseHub.js              # Transporte SSE compartido
   overlay/
     index.js                      # Rutas del overlay y backend
+    persistenceService.js         # Estado JSON y logs del overlay
     backend.html                  # Interfaz mínima de configuración
     public/                       # Manifest, service worker e iconos de la PWA tortu
-v10.html                              # Overlay principal conectado a eventos de TikTok
+v21.html                              # Overlay principal conectado a eventos de TikTok
 test/
   server.test.js                  # HTTP, configuración y publicación
+  overlay-persistence.test.js     # Persistencia, exportación y retención del overlay
   realtime.test.js                # Conexiones y ciclo de vida SSE
   tiktok/                         # Pruebas del conector y reconexión
 ```

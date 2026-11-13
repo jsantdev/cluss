@@ -32,7 +32,7 @@ Las reglas marcadas (propuesto) aun no estan confirmadas por el autor.
  - Sin titulo del live (eliminado).
  - Sin indicador de nivel (Nv) en el pie: no corresponde a un overlay.
  - Franja de estadisticas bajo el tablero (unidos, comentarios, regalos, me gusta, seguidores, compartidos) con eventos REALES del live. Los bots (bot:true) y los toques manuales no cuentan. El contador de regalos es solo informativo, nunca para pedir regalos.
- - Tabla de copas en la columna derecha, ordenada por copas, con banderas del 1er al 7mo puesto y corona al primero. El acumulado vive en P.cp (por id de club, se guarda en localStorage).
+ - Tabla de copas en la columna derecha, ordenada por copas, con banderas del 1er al 7mo puesto y corona al primero. El acumulado vive en P.cp (por id de club, se guarda en el servidor: clave cluss.v1).
  - Duelo con solo 2 carriles, mas grandes, y tortugas mas grandes. Los 2 paises activos se definen en DUELO (ids de POOL).
  - Cada pais se muestra con su bandera grande y su nombre debajo, con el mismo ancho que la bandera. Sin luz ni barra de color bajo el encabezado: es un overlay de TikTok, no un juego.
 
@@ -50,7 +50,7 @@ Las reglas marcadas (propuesto) aun no estan confirmadas por el autor.
  - TURBO GRATIS DEL BOT: ELIMINADO (BOT_TURBO_GIFT_ON=false). El turbo se activa al completar el limite dinamico o con un regalo real.
  - El bot GENERA EVENTOS visibles (chat y likes) con nombres tortubot_N: suman puntos, suenan y muestran su burbuja sobre la tortuga. NO cuentan en estadisticas, MVP, XP, avatares, avisos ni logs, y nunca dan el golpe final (BOT_CAP).
 9. ESTADISTICAS INTEGRADAS (v14, un solo archivo)
- - Ya no hay backend aparte: el modulo "ESTADISTICAS INTEGRADAS" guarda todo en el navegador (localStorage) y el panel vive en este mismo HTML.
+ - PERSISTENCIA (v19): NADA se guarda en el navegador. Todo va al SERVIDOR por la capa SRV (contrato completo para el backend en el bloque 'PERSISTENCIA EN SERVIDOR', justo antes del primer script). El panel de estadisticas sigue en este mismo HTML.
  - Registra chats y regalos REALES (nunca el ritmo automatico) y el inicio/fin de cada ronda. Botones 📊 (torneos) y 🌎 (paises) abren el panel.
  - Solo OBSERVA: no pide ni promete nada a los espectadores (regla 1). Cerrar el panel antes de mostrar pantalla: contiene nombres de usuarios.
 
@@ -65,6 +65,12 @@ Las reglas marcadas (propuesto) aun no estan confirmadas por el autor.
  - Abajo de cada carril: SIN huevos grandes (quitados, FRONT_EGGS=0). Solo 12 huevos (2 filas de 6) ARRIBA con los usuarios anteriores.
  - Sin gente real, los huevos son avatares de BOT (🤖 tortubot_N, claramente bots) y el frente sale del JSON de hinchas (HINCHAS_JSON editable + /api/recent-users); sin JSON, la bandera.
  - Los eventos del bot nunca entran al nido ni se hacen pasar por personas. Al empezar cada ronda el nido vuelve a bots.
+14. TORNEO LIBRE (v12)
+ - Modo 'libre': arranca ACTIVO y BLOQUEADO por defecto (cluss.torneoLock ausente = libre). Solo se sale con el boton 🔒 de la barra (ciclo: Libre > torneos fijos > AUTO > Libre).
+ - Duelo suelto de 2 carriles. El chat REAL propone equipos (de cualquier torneo): cada comentario que nombra uno le suma 1 voto (libreVotes, se guarda en el servidor: clave cluss.v1). Los 2 mas votados juegan la siguiente carrera.
+ - Todo evento real que no es regalo (comentario, like, seguir, compartir) va SOLO al contador de taps; solo los regalos mueven la pista directo. Un comentario con un equipo que no corre ademas le suma 1 voto.
+ - INACTIVIDAD: se mide desde la ultima interaccion REAL (chat, like, regalo, seguir, compartir; los 'member' no reinician el reloj). Plazo 60 s; con mas de 1000 interacciones en el partido, 120 s. Se muestra regresivo en segundos (#idleCountdown). Al vencer, gana el que va primero y avanza, pero NO suma copa.
+ - Faltan equipos: con 1 solo del chat se usa ese y se sortea su rival; sin votos se sortean los 2, siempre entre el catalogo de TODOS los torneos. Nunca hay carril vacio ni texto de espera.
 13. CONTRATO CON EL BACKEND (v38) - LEER SI TOCAS EL SERVIDOR
  El frontend es UN SOLO HTML. Habla con el backend solo por estas rutas:
   GET  /api/events          Server-Sent Events (SSE) con DOS tipos de mensaje:
@@ -91,7 +97,7 @@ Las reglas marcadas (propuesto) aun no estan confirmadas por el autor.
   - Los eventos sin equipo asignado van al carril seleccionado; los regalos se asignan al equipo mencionado por el usuario en el ultimo minuto.
   - Nido: huevos en blanco al iniciar; los 3 huevos grandes = los 3 usuarios REALES de mayor puntaje; el resto del nido = los demas recientes; huevos de bot (🐢) solo se van cargando con eventos del bot.
   - Alerta de evento = avatar grande del usuario sobre los huevos, que luego baja al nido. Puntaje por usuario: unirse 1, comentar 5, like 1 c/u, seguir 3, compartir 3; cada regalo da +10% y turbo de 15 s con 6% en total repartido.
-  - Estadisticas: panel 📊 con pestaña Usuarios (historial completo por usuario, guardado en localStorage 'cluss.users').
+  - Estadisticas: panel 📊 con pestaña Usuarios (historial completo por usuario, enviado al servidor (flujo user-events); el panel solo muestra una ventana corta).
   - Contador tap tap: miembro 1, comentario 10, like 1 por me gusta, seguir 3 y compartir 5. Al completar 500 taps se avanza 7% y se activa el turbo durante 8 s.
   - Regalo real independiente del contador: +10% inmediato y turbo de 15 s con 6% en total repartido, por cada unidad.
   - CTAs: destello inicial UNA vez por sesion (nada de pedidos en bucle, regla 1.a).
@@ -310,8 +316,9 @@ background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.4)),r
 .ua,.ua.ph{width:20px;height:20px;font-size:9px;line-height:16px}
 .hd{height:46px}.hd>svg.fgb:first-child{display:block;width:76px;height:53px;border:2px solid rgba(255,255,255,.75);border-radius:4px;box-shadow:0 2px 4px rgba(0,0,0,.5)}
 .sv>svg{height:446px}
-.in{transform:scale(calc(var(--s,2)*var(--kx,1)),var(--s,2))}
-@keyframes hop{40%{transform:translateY(-2px) scale(calc(var(--s,2)*var(--kx,1)),var(--s,2))}}
+:root{--tk:.85} /* TAMANO DE LA TORTUGA: 1 = como antes (v19), .85 = 15% mas chica. Cambiar solo este numero. Conserva los pies en su sitio (origen abajo al centro). */
+.in{transform:scale(calc(var(--s,2)*var(--kx,1)*var(--tk)),calc(var(--s,2)*var(--tk)))}
+@keyframes hop{40%{transform:translateY(-2px) scale(calc(var(--s,2)*var(--kx,1)*var(--tk)),calc(var(--s,2)*var(--tk)))}}
 .hd{height:auto;flex-direction:column;gap:2px;padding:4px 0 3px}
 .hd .pod{display:flex;justify-content:center;align-items:flex-end;gap:3px;width:76px;margin-top:8px}
 .pod .pw{position:relative;flex:none}
@@ -495,17 +502,100 @@ background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.4)),r
 </style>
 <script>window.I18N={en:false,tr:function(x){return x}};</script>
 <script src="/activity-policy.js"></script>
+<!-- ===== PERSISTENCIA EN SERVIDOR (v19) ================================================================
+ DECISION DEL AUTOR: NADA se guarda en el navegador (ni localStorage ni sessionStorage ni IndexedDB). El overlay corre en un
+ celular de gama media y cada JSON.stringify + escritura sincronica local le quita CPU y memoria al render. Todo lo que debe
+ sobrevivir a un reinicio vive en el SERVIDOR; el cliente solo guarda en RAM lo imprescindible para dibujar.
+
+ >>> PARA EL DESARROLLADOR DEL BACKEND: CONTRATO QUE DEBE IMPLEMENTAR <<<
+ Mismo origen que /api/events y /api/activity-policy.js. Sin cookies ni login nuevos. Si un endpoint no existe o falla, el juego
+ sigue funcionando con los valores por defecto y reintenta con espera creciente (2 s, 4 s ... tope 60 s); en ese caso lo que
+ no llego se pierde al cerrar la pagina, y NO se cae a localStorage a proposito.
+
+ 1) GET /api/state.js   (Content-Type: application/javascript, sin cache)
+    Se carga con una etiqueta script con src, ANTES que el resto, asi el estado inicial esta disponible de forma sincrona (sin XHR bloqueante).
+    Debe responder:  window.CLUSS_STATE = { "<clave>": <JSON>, ... };
+    Si no hay nada guardado: window.CLUSS_STATE = {};
+    Incluir SOLO documentos chicos (ver tabla). NO incluir logs de ronda ni historial por usuario (son pesados y se piden aparte).
+ 2) PUT    /api/state/:clave     body = JSON del valor (cualquier JSON: objeto, string, numero). Upsert, el ultimo gana.
+    DELETE /api/state/:clave     borra el documento (el servidor puede ignorarlo si prefiere conservar historial).
+    GET    /api/state/:clave     devuelve el JSON guardado o 404. Solo lo usa el panel de estadisticas al tocar "Ver" / "⬇" en un log de ronda.
+    El cliente junta cambios: como mucho 1 PUT por clave cada 1 s (cada 5 s en las claves pesadas) y manda el ultimo valor, no cada cambio.
+ 3) POST   /api/log/:flujo       body = {"records":[ ... hasta 200 registros ... ]}  Solo AGREGA (append-only). Lote cada ~5 s.
+    DELETE /api/log/:flujo       vacia el flujo (solo lo dispara el boton confirmado "Vaciar archivo del chat").
+    GET    /api/log/chat-texts.json  y  /api/log/chat-texts.txt   descargas del archivo del chat (ver abajo). Enviar Content-Disposition: attachment.
+
+ TABLA DE CLAVES Y FLUJOS
+  clave / flujo            tipo       tamano aprox.   en state.js   contenido
+  cluss.v1                 PUT        chico (<20 KB)  SI            progreso del juego: copas por club (cp), victorias, torneo activo, votos del chat, popularidad de paises, etc.
+  cluss.torneoLock         PUT        string          SI            "libre" | "auto" | id de torneo fijo elegido con el boton 🔒
+  cluss.ctaCalm            PUT        string          SI            "1" | "0" (modo discreto de los CTA: brillo suave; "0" = llamativo con aro y pulso)
+  cluss.lang               PUT        chico           SI            idioma del relator por torneo {libre:"es",champions:"en",...}
+  cluss.crest.<id>         PUT        string (URL)    SI            cache de la URL del escudo encontrada en Wikipedia
+  cluss.stats              PUT        mediano         SI            torneos, rondas, menciones de clubes y indice de logs. Clave pesada: 1 PUT / 5 s
+  cluss.libreVotes         PUT        mediano         SI            votos del Torneo Libre: sal, totales, ronda actual, historial (max 500 rondas) y huellas de usuarios unicos. Clave pesada: 1 PUT / 5 s
+  cluss.log.<idRonda>      PUT        hasta ~300 KB   NO            log completo de UNA ronda con regalos (regalos + hasta 1500 mensajes). Se escribe y se libera de RAM. El cliente pide DELETE de los logs viejos (quedan los ultimos 15); el servidor puede conservarlos igual.
+  cluss.chatArchive        (meta)     chico           SI (opcional) {"v":1,"created":ms,"updated":ms,"trimmed":0,"count":N}. SOLO lo LEE el cliente; lo mantiene el servidor a partir de /api/log/chat-texts. Si falta, el cliente cuenta desde 0.
+  log  chat-texts          append     1 registro/comentario  --   [timestamp_ms, "texto"] (sin autor, sin bots). Sin tope en el cliente: el servidor decide la retencion.
+  log  user-events         append     1 registro/evento real --   {u:"usuario en minusculas", name:"Usuario", t:ms, type:"chat|like|gift|follow|share|member", n:numero, text?:"...", gift?:"..."}
+                                                                   Historial completo por usuario. El cliente solo conserva en RAM una ventana corta (60 usuarios x 60 eventos) para el panel 📊.
+ Privacidad: chat-texts no lleva autor; cluss.libreVotes guarda huellas con sal, no nombres. user-events SI lleva el nombre: tratarlo como dato personal (retencion limitada, acceso restringido).
+ Concurrencia: hay UN solo overlay escribiendo; el ultimo PUT gana. Si hubiera varios overlays a la vez, el servidor debe fusionar o rechazar.
+ =================================================================================================================== -->
+<script src="/api/state.js"></script>
 <script>
-/* Mantiene el overlay operativo con los valores base si falla una parte de activity-policy.js. */
+/* SRV: unica puerta de persistencia del cliente. Ver el contrato de arriba. API: get(k,def) · set(k,valor,{keep}) · del(k) · load(k)->Promise · log(flujo,registro) · clearLog(flujo) · flush(urgente) */
+(function(){
+'use strict';
+var BOOT=(window.CLUSS_STATE&&typeof window.CLUSS_STATE==='object')?window.CLUSS_STATE:{};
+var mem=Object.assign({},BOOT),DOC='/api/state/',LOG='/api/log/';
+var HEAVY=/^cluss\.(stats|libreVotes|log\.)/;       /* claves pesadas: se envian cada 5 s, no cada 1 s */
+var docs=new Map(),logs={};
+var wait=function(s,k){return s.fails?Math.min(60000,2000*Math.pow(2,s.fails)):(HEAVY.test(k)?5000:1000)};
+function send(k,urgent){
+ var s=docs.get(k);if(!s||!s.dirty||s.busy)return;
+ s.dirty=false;s.busy=true;
+ var put=s.op==='put',body;
+ if(put){try{body=JSON.stringify(mem[k])}catch(e){s.busy=false;return}}
+ fetch(DOC+encodeURIComponent(k),{method:put?'PUT':'DELETE',headers:put?{'Content-Type':'application/json'}:undefined,body:body,keepalive:!!(urgent&&body&&body.length<60000)})
+ .then(function(r){if(!r.ok)throw 0;s.fails=0;if(put&&!s.dirty&&s.keep===false)delete mem[k]}) /* keep:false = ya esta en el servidor, se libera la RAM */
+ .catch(function(){s.dirty=true;s.fails++})
+ .then(function(){s.busy=false;if(s.dirty&&!s.t)s.t=setTimeout(function(){s.t=0;send(k)},wait(s,k))});
+}
+function sched(k,op,opt){
+ var s=docs.get(k);if(!s){s={t:0,busy:false,dirty:false,fails:0,op:'put',keep:true};docs.set(k,s)}
+ s.op=op;s.dirty=true;s.keep=!(opt&&opt.keep===false);
+ if(!s.t&&!s.busy)s.t=setTimeout(function(){s.t=0;send(k)},wait(s,k));
+}
+function sendLog(f,urgent){
+ var s=logs[f];if(!s||s.busy||!s.q.length)return;
+ var batch=s.q.splice(0,200),body=JSON.stringify({records:batch});s.busy=true;
+ fetch(LOG+f,{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:!!(urgent&&body.length<60000)})
+ .then(function(r){if(!r.ok)throw 0;s.fails=0})
+ .catch(function(){s.q=batch.concat(s.q);s.fails++;if(s.q.length>2000)s.q.splice(0,s.q.length-2000)}) /* tope de RAM si el servidor no responde */
+ .then(function(){s.busy=false;if(s.q.length&&!s.t)s.t=setTimeout(function(){s.t=0;sendLog(f)},s.fails?Math.min(60000,2000*Math.pow(2,s.fails)):(s.q.length>=200?500:5000))});
+}
+function flush(urgent){docs.forEach(function(s,k){if(s.t){clearTimeout(s.t);s.t=0}send(k,urgent)});Object.keys(logs).forEach(function(f){var s=logs[f];if(s.t){clearTimeout(s.t);s.t=0}sendLog(f,urgent)})}
+window.SRV={
+ get:function(k,d){var v=mem[k];return v==null?d:v},
+ set:function(k,v,opt){mem[k]=v;sched(k,'put',opt);return true},
+ del:function(k){delete mem[k];sched(k,'del');},
+ load:function(k){if(mem[k]!=null)return Promise.resolve(mem[k]);return fetch(DOC+encodeURIComponent(k)).then(function(r){return r.ok?r.json():null}).catch(function(){return null})},
+ log:function(f,rec){var s=logs[f]||(logs[f]={q:[],t:0,busy:false,fails:0});s.q.push(rec);if(s.q.length>2000)s.q.splice(0,s.q.length-2000);if(!s.t&&!s.busy)s.t=setTimeout(function(){s.t=0;sendLog(f)},5000)},
+ clearLog:function(f){var s=logs[f];if(s)s.q.length=0;fetch(LOG+f,{method:'DELETE'}).catch(function(){})},
+ flush:flush
+};
+addEventListener('pagehide',function(){flush(true)});
+document.addEventListener('visibilitychange',function(){if(document.hidden)flush(true)});
+})();
+</script>
+<script>
+/* v11: si /activity-policy.js no carga o le faltan funciones, se rellenan aqui (antes tiraba error y el contador no funcionaba) */
 (function(){var P=window.TORTUWORLD_ACTIVITY_POLICY=window.TORTUWORLD_ACTIVITY_POLICY||{};
  P.isInteractionEvent=P.isInteractionEvent||function(t){return['chat','like','gift','follow','share'].indexOf(t)>=0};
- P.statEventDelta=P.statEventDelta||function(t,n){if(['member','chat','gift','like','follow','share'].indexOf(t)<0)return 0;return t==='gift'||t==='like'?Math.max(1,Math.floor(Number(n))||1):1};
- P.formatStatCount=P.formatStatCount||function(n){n=Math.max(0,Math.floor(Number(n)||0));if(n<1000)return String(n);if(n<999500)return(n<10000?(n/1000).toFixed(1).replace(/\.0$/,''):String(Math.round(n/1000)))+'K';return(n<1e7?(n/1e6).toFixed(1).replace(/\.0$/,''):String(Math.round(n/1e6)))+'M'};
  P.tapLimitStep=P.tapLimitStep||function(){return 0};
  P.inactivityTimeoutMs=P.inactivityTimeoutMs||function(){return 60000};
  P.inactivityRemainingSeconds=P.inactivityRemainingSeconds||function(i,t){return Math.max(0,Math.ceil((t-i)/1000))};
- P.shouldAwardCup=P.shouldAwardCup||function(f,t){return f===true&&t!==true};
- P.selectFreeTournamentPair=P.selectFreeTournamentPair||function(r,a,random){var p=Array.isArray(r)?r.slice(0,2):[],v=Array.from(new Set(Array.isArray(a)?a:[])).filter(function(id){return p.indexOf(id)<0});while(p.length<2&&v.length){var n=random?random():Math.random(),i=Number.isFinite(n)?Math.max(0,Math.min(v.length-1,Math.floor(n*v.length))):0;p.push(v.splice(i,1)[0])}return p};
  P.shouldFinishForInactivity=P.shouldFinishForInactivity||function(i,t){return i>=t};})();
 </script>
 </head>
@@ -552,7 +642,7 @@ background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.4)),r
 <div class="evs" id="evs" role="status" aria-label="Estadisticas del live"><div class="st" data-k="member" title="Unidos"><b>👥</b><span>0</span></div><div class="st" data-k="chat" title="Comentarios"><b>💬</b><span>0</span></div><div class="st" data-k="gift" title="Regalos"><b>🎁</b><span>0</span></div><div class="st" data-k="like" title="Me gusta"><b>❤️</b><span>0</span></div><div class="st" data-k="follow" title="Seguidores nuevos"><b>➕</b><span>0</span></div><div class="st" data-k="share" title="Compartidos"><b>↗️</b><span>0</span></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- PANEL DE ESTADISTICAS (📊/🌎): contiene nombres y comentarios reales; cerrarlo antes de mostrar pantalla -->
-<section id="stp" hidden role="dialog" aria-label="Estadísticas"><header><b>🐢 Estadísticas</b><span><button data-reset>↺ Reiniciar copas</button> <button data-close aria-label="Cerrar">✕</button></span></header><nav><button data-tab="torneos">🏆 Torneos</button><button data-tab="paises">🌎 Clubes</button><button data-tab="libre">🆓 Libre</button><button data-tab="comentarios">📝 Comentarios</button><button data-tab="usuarios">👤 Usuarios</button><button data-tab="regalos">🎁 Regalos</button></nav><div class="stb"></div></section>
+<section id="stp" hidden role="dialog" aria-label="Estadísticas"><header><b>🐢 Estadísticas</b><span><button data-reset>↺ Reiniciar copas</button> <button data-close aria-label="Cerrar">✕</button></span></header><nav><button data-tab="torneos">🏆 Torneos</button><button data-tab="paises">🌎 Clubes</button><button data-tab="usuarios">👤 Usuarios</button><button data-tab="regalos">🎁 Regalos</button></nav><div class="stb"></div></section>
 </main>
 <script>
 /* ############ SECCION 1: MOTOR DEL JUEGO (datos, carriles, puntos, conexion SSE, estadisticas) ############ */
@@ -561,6 +651,9 @@ background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.4)),r
 const POOL={ol:{id:'ol',n:'OLIMPIA',s:'OLI',c:'#f1f1f1'},cp:{id:'cp',n:'CERRO',s:'CER',c:'#3b82f6'},li:{id:'li',n:'LIBERTAD',s:'LIB',c:'#e5e5e5'},gu:{id:'gu',n:'GUARANÍ',s:'GUA',c:'#f5c400'},lu:{id:'lu',n:'LUQUEÑO',s:'LUQ',c:'#2563eb'},na:{id:'na',n:'NACIONAL',s:'NAC',c:'#c8102e'},sa:{id:'sa',n:'SOL DE AMÉRICA',s:'SOL',c:'#f5c400'},to:{id:'to',n:'12 DE OCTUBRE',s:'12O',c:'#16a34a'}}; /* CLUSS: clubes de Paraguay */
 /* El ganador permanece y su rival rota entre los otros clubes, sin repetir el duelo anterior. */
 const START_DUELO=['ol','cp'];
+/* TORNEO LIBRE: palabras que cuentan como nombrar a cada club de POOL (el resto de pools ya trae sus aliases) */
+const POOL_ALIASES={ol:['OLIMPIA','OLI','DECANO'],cp:['CERRO','CERRO PORTEÑO','CERRO PORTENO','CP','CICLON','AZULGRANA'],li:['LIBERTAD','GUMARELO'],gu:['GUARANÍ','GUARANI','ABORIGEN'],lu:['LUQUEÑO','LUQUENO','LUQUE','SPORTIVO LUQUENO','CHANCHON'],na:['NACIONAL'],sa:['SOL DE AMERICA','SOL DE AMÉRICA','DANZARIN'],to:['12 DE OCTUBRE','DOCE DE OCTUBRE','12 OCTUBRE','ITAUGUA']};
+Object.keys(POOL_ALIASES).forEach(k=>{POOL[k].aliases=POOL_ALIASES[k]});
 const COUNTRY_POOL={
  'ct-ar':{id:'ct-ar',n:'ARGENTINA',s:'ARG',emoji:'🇦🇷',aliases:['ARGENTINA']},'ct-br':{id:'ct-br',n:'BRASIL',s:'BRA',emoji:'🇧🇷',aliases:['BRASIL','BRAZIL']},
  'ct-de':{id:'ct-de',n:'ALEMANIA',s:'GER',emoji:'🇩🇪',aliases:['ALEMANIA','GERMANY']},'ct-es':{id:'ct-es',n:'ESPAÑA',s:'ESP',emoji:'🇪🇸',aliases:['ESPANA','SPAIN']},
@@ -640,25 +733,23 @@ const ELITE_POOL={ /* ELITE NATIONS CUP: 8 paises */
  'el-gb':{id:'el-gb',n:'REINO UNIDO',s:'GBR',emoji:'🇬🇧',aliases:['REINO UNIDO','UK','UNITED KINGDOM','GRAN BRETAÑA','GRAN BRETANA']},'el-de':{id:'el-de',n:'ALEMANIA',s:'GER',emoji:'🇩🇪',aliases:['ALEMANIA','GERMANY']},
  'el-au':{id:'el-au',n:'AUSTRALIA',s:'AUS',emoji:'🇦🇺',aliases:['AUSTRALIA']},'el-sg':{id:'el-sg',n:'SINGAPUR',s:'SGP',emoji:'🇸🇬',aliases:['SINGAPUR','SINGAPORE']}
 };
-const TOURNAMENT_MODES=['libertadores','champions','countries','america','elite','free'];
-const TOURNAMENT_LABELS={libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'COPA DEL MUNDO',america:'COPA AMÉRICA',elite:'ELITE NATIONS CUP',free:'TORNEO LIBRE'};
-const FREE_POOL={};
-function freeTeamPool(){return Object.assign({},POOL,COUNTRY_POOL,CHAMPIONS_POOL,LIBERTADORES_POOL,AMERICA_POOL,ELITE_POOL,FREE_POOL)}
-function freeTeamList(){return Object.values(freeTeamPool())}
-let freeTournamentStats={updatedAt:null,enabled:false,teams:[]};
+const TOURNAMENT_MODES=['libre','libertadores','champions','countries','america','elite']; /* 'libre' = TORNEO LIBRE: arranca activo y bloqueado; solo se sale con el boton manual 🔒 */
+const TOURNAMENT_LABELS={libre:'TORNEO LIBRE',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'COPA DEL MUNDO',america:'COPA AMÉRICA',elite:'ELITE NATIONS CUP'};
 const COUNTRY_CHAMPIONS=['ct-ar','ct-br','ct-de','ct-es','ct-fr','ct-it','ct-uy','ct-en'];
 const COUNTRY_POPULAR_FALLBACK=['ct-py','ct-co','ct-cl','ct-mx','ct-us','ct-pt','ct-nl','ct-jp']; /* entran al Mundial si el chat aun no voto */
-let tournamentMode='free',countryPopularity={},countryEntrants=[],tournamentInteractions={};
+let tournamentMode='libre',countryPopularity={},countryEntrants=[],tournamentInteractions={},libreVotes={},libreLast=[];
 try{
- const saved=JSON.parse(localStorage.getItem('cluss.v1')||'{}');
- const savedLock=localStorage.getItem('cluss.torneoLock');
- if(TOURNAMENT_MODES.includes(savedLock))tournamentMode=savedLock;
- else if(savedLock==='auto'&&TOURNAMENT_MODES.includes(saved.tournamentMode))tournamentMode=saved.tournamentMode;
+ const saved=SRV.get('cluss.v1',{}); /* BACKEND: estado inicial viene de /api/state.js (clave cluss.v1) */
+ /* Sin eleccion manual guardada = TORNEO LIBRE bloqueado. 'auto' = rotacion automatica; otro valor = torneo fijo elegido a mano (boton 🔒). */
+ const lockPref=SRV.get('cluss.torneoLock',null); /* BACKEND: clave cluss.torneoLock */
+ if(lockPref==='auto'){if(TOURNAMENT_MODES.includes(saved.tournamentMode))tournamentMode=saved.tournamentMode}
+ else if(TOURNAMENT_MODES.includes(lockPref))tournamentMode=lockPref;
+ if(saved.libreVotes&&typeof saved.libreVotes==='object'&&!Array.isArray(saved.libreVotes))for(const k in saved.libreVotes){const v=+saved.libreVotes[k];if(v>0)libreVotes[k]=v}
  if(saved.countryPopularity&&typeof saved.countryPopularity==='object')countryPopularity=saved.countryPopularity;
  if(Array.isArray(saved.countryEntrants))countryEntrants=saved.countryEntrants;
  if(saved.tournamentInteractions&&typeof saved.tournamentInteractions==='object')tournamentInteractions=saved.tournamentInteractions;
 }catch(e){}
-function poolForMode(mode=tournamentMode){return mode==='free'?freeTeamPool():mode==='countries'?COUNTRY_POOL:mode==='champions'?CHAMPIONS_POOL:mode==='libertadores'?LIBERTADORES_POOL:mode==='america'?AMERICA_POOL:mode==='elite'?ELITE_POOL:POOL}
+function poolForMode(mode=tournamentMode){return mode==='libre'?librePool():mode==='countries'?COUNTRY_POOL:mode==='champions'?CHAMPIONS_POOL:mode==='libertadores'?LIBERTADORES_POOL:mode==='america'?AMERICA_POOL:mode==='elite'?ELITE_POOL:POOL}
 function countryTournamentIds(){
  const nonWinners=Object.keys(COUNTRY_POOL).filter(id=>!COUNTRY_CHAMPIONS.includes(id));
  const fallbackRank=new Map(COUNTRY_POPULAR_FALLBACK.map((id,i)=>[id,i]));
@@ -667,34 +758,68 @@ function countryTournamentIds(){
  return COUNTRY_CHAMPIONS.concat(popular);
 }
 function tournamentIds(mode=tournamentMode){
- if(mode==='free'){
-  const registered=freeTournamentStats.teams.filter(team=>FREE_POOL[team.id]).slice(0,2).map(team=>team.id);
-  return window.TORTUWORLD_ACTIVITY_POLICY.selectFreeTournamentPair(registered,freeTeamList().map(team=>team.id));
- }
+ if(mode==='libre')return['libre-a','libre-b']; /* el Torneo Libre es un duelo suelto: solo importa que sean 2 puestos */
  if(mode==='countries'&&countryEntrants.length===16&&countryEntrants.every(id=>COUNTRY_POOL[id]))return countryEntrants;
  return Object.keys(poolForMode(mode));
 }
-function tournamentItem(id){const item=POOL[id]||COUNTRY_POOL[id]||CHAMPIONS_POOL[id]||LIBERTADORES_POOL[id]||AMERICA_POOL[id]||ELITE_POOL[id]||FREE_POOL[id];return item?Object.assign({c:'#3b82f6'},item):null}
-function applyFreeTournamentStats(stats){
- if(!stats||!Array.isArray(stats.teams))return;
- Object.keys(FREE_POOL).forEach(id=>delete FREE_POOL[id]);
- const colors=['#2563eb','#e11d48','#16a34a','#f59e0b','#8b5cf6','#0891b2'];
- const teams=[];
- stats.teams.forEach((team,index)=>{
-  if(!team||typeof team.id!=='string'||!/^free-[a-f0-9]{12}$/.test(team.id)
-   ||typeof team.name!=='string'||!team.name.trim())return;
-  const item={id:team.id,n:team.name.trim(),s:team.name.trim().replace(/[^A-Z0-9]/gi,'').slice(0,3).toUpperCase()||'LIB',
-   emoji:'🆓',aliases:[team.name.trim()],c:colors[index%colors.length]};
-  FREE_POOL[item.id]=item;teams.push({...team,name:item.n});
- });
- freeTournamentStats={updatedAt:stats.updatedAt||null,enabled:Boolean(stats.enabled),teams};
+function tournamentItem(id){const item=POOL[id]||COUNTRY_POOL[id]||CHAMPIONS_POOL[id]||LIBERTADORES_POOL[id]||AMERICA_POOL[id]||ELITE_POOL[id];return item?Object.assign({c:'#3b82f6'},item):null}
+
+/* ===== TORNEO LIBRE =====
+   Un duelo suelto (2 carriles) por carrera. Los equipos los propone el chat REAL: cada comentario que nombre un equipo (de CUALQUIER torneo)
+   le suma 1 voto. Al terminar la carrera, los 2 mas votados juegan la siguiente. Si faltan equipos se sortean entre todos los torneos:
+   con 1 solo equipo del chat se usa ese y se sortea su rival; sin votos se sortean los 2. Nunca queda un carril vacio ni "esperando". */
+function libreNorm(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase()}
+let _lxSig='',_lx=null;
+/* Indice de equipos de todos los torneos. Un alias pertenece al primer equipo que lo declara (asi "cerro" u "olimpia" no se duplican entre pools).
+   Se reconstruye solo si el catalogo de banderas crecio. */
+function libreIndex(){
+ const pools=[POOL,LIBERTADORES_POOL,CHAMPIONS_POOL,COUNTRY_POOL,AMERICA_POOL,ELITE_POOL];
+ const sig=pools.map(p=>Object.keys(p).length).join('.');
+ if(_lx&&sig===_lxSig)return _lx;
+ const owner=new Map(),items=[],seen=new Set(),groups=[];
+ pools.forEach(p=>Object.values(p).forEach(it=>{
+  (it.aliases||[]).concat([it.n]).forEach(a=>{const k=libreNorm(a).trim();if(k&&!owner.has(k))owner.set(k,it.id)});
+ }));
+ pools.forEach(p=>{const g=[];Object.values(p).forEach(it=>{if(owner.get(libreNorm(it.n).trim())===it.id&&!seen.has(it.id)){seen.add(it.id);items.push(it.id);g.push(it.id)}});if(g.length)groups.push(g)}); /* groups: un grupo por torneo, para que el sorteo no se llene de paises */
+ const aliases=[...owner].map(([alias,id])=>({alias,id,re:new RegExp('(^|[^A-Z0-9])'+alias.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'($|[^A-Z0-9])')}));
+ _lx={owner,items,groups,aliases,pool:Object.assign({},ELITE_POOL,AMERICA_POOL,COUNTRY_POOL,CHAMPIONS_POOL,LIBERTADORES_POOL,POOL)};_lxSig=sig;
+ return _lx;
+}
+function librePool(){return libreIndex().pool}
+function libreCanon(id){const it=tournamentItem(id);return it?(libreIndex().owner.get(libreNorm(it.n).trim())||id):id}
+/* Equipos nombrados en un texto (ids canonicos, sin repetir). Si un alias queda dentro de otro mas largo ("cerro" en "cerro porteño"), cuenta el largo. */
+function libreMentions(text){
+ const n=libreNorm(text),hit=libreIndex().aliases.filter(a=>a.re.test(n));
+ const keep=hit.filter(a=>!hit.some(b=>b!==a&&b.alias.length>a.alias.length&&b.alias.includes(a.alias)));
+ return[...new Set(keep.map(a=>a.id))];
+}
+function libreClear(){Object.keys(libreVotes).forEach(k=>delete libreVotes[k])}
+/* Registra los equipos propuestos en un comentario REAL: +1 voto a cada equipo nombrado. Los que juegan ahora no se votan (ya tienen carril). Devuelve cuantos voto. */
+function libreVote(text){
+ const playing=new Set(DUELO.map(libreCanon)),ids=libreMentions(text).filter(id=>!playing.has(id));
+ ids.forEach(id=>{libreVotes[id]=(libreVotes[id]||0)+1});
+ return ids.length;
+}
+/* Los 2 equipos de la siguiente carrera: mas votados del chat; lo que falte, sorteado entre todos los torneos (sin repetir a los que acaban de jugar si se puede). */
+function libreDuel(){
+ const idx=libreIndex(),prev=new Set(libreLast.map(libreCanon));
+ const pick=Object.keys(libreVotes).filter(id=>libreVotes[id]>0&&idx.items.includes(id)).sort((a,b)=>libreVotes[b]-libreVotes[a]).slice(0,2); /* sort estable: a igualdad gana quien se propuso primero */
+ while(pick.length<2){
+  let gs=idx.groups.map(g=>g.filter(id=>!pick.includes(id)&&!prev.has(id))).filter(g=>g.length);
+  if(!gs.length)gs=idx.groups.map(g=>g.filter(id=>!pick.includes(id))).filter(g=>g.length);
+  const g=gs[Math.floor(Math.random()*gs.length)]; /* primero un torneo al azar, luego un equipo de ese torneo */
+  pick.push(g[Math.floor(Math.random()*g.length)]);
+ }
+ libreLast=pick.slice();libreClear();
+ return pick;
 }
 /* CLUSS · CUADRO (eliminacion directa, UN SOLO PARTIDO por club y ronda). 8 clubes = 4 cuartos, 2 semis, 1 final.
    BR.r[0]=los 8 clubes sorteados (cada 2 seguidos juegan entre si) · r[1]=ganadores de cuartos · r[2]=de semis · r[3]=campeon. null = aun sin jugar.
    Si agregas o quitas clubes de POOL, la cantidad debe ser potencia de 2 (4, 8, 16). */
 let BR=null;
 function bracketFrom(ids){const r=[ids.slice()];while(r[r.length-1].length>1)r.push(Array(r[r.length-1].length/2).fill(null));return{r}}
-function brNew(mode=tournamentMode){const ids=mode==='countries'?countryTournamentIds():tournamentIds(mode);countryEntrants=mode==='countries'?ids.slice():countryEntrants;tournamentInteractions=Object.fromEntries(ids.map(id=>[id,0]));return bracketFrom(ids.slice().sort(()=>Math.random()-.5))}
+function brNew(mode=tournamentMode){if(mode==='libre'){const d=libreDuel();tournamentInteractions=Object.fromEntries(d.map(id=>[id,0]));return bracketFrom(d)} /* Torneo Libre: cuadro de 1 solo partido con los 2 mas votados */
+ const ids=mode==='countries'?countryTournamentIds():tournamentIds(mode);countryEntrants=mode==='countries'?ids.slice():countryEntrants;tournamentInteractions=Object.fromEntries(ids.map(id=>[id,0]));return bracketFrom(ids.slice().sort(()=>Math.random()-.5))}
 function brCur(){for(let k=0;k<BR.r.length-1;k++){const m=BR.r[k+1].indexOf(null);if(m>=0)return{k,m,duel:[BR.r[k][2*m],BR.r[k][2*m+1]]}}return null}
 function brWin(id){const c=brCur();if(c)BR.r[c.k+1][c.m]=id}
 function interactionFinalists(){
@@ -703,12 +828,12 @@ function interactionFinalists(){
   ||Number(semiWinners.includes(b))-Number(semiWinners.includes(a))
   ||entrants.indexOf(a)-entrants.indexOf(b)).slice(0,2);
 }
-function roundName(k){const total=BR.r.length-1;return total===4?['OCTAVOS DE FINAL','CUARTOS DE FINAL','SEMIFINALES','FINAL'][k]:total===3?['CUARTOS DE FINAL','SEMIFINALES','FINAL'][k]:'RONDA '+(k+1)}
+function roundName(k){const total=BR.r.length-1;return total===1?'TORNEO LIBRE':total===4?['OCTAVOS DE FINAL','CUARTOS DE FINAL','SEMIFINALES','FINAL'][k]:total===3?['CUARTOS DE FINAL','SEMIFINALES','FINAL'][k]:'RONDA '+(k+1)}
 const LEGACY_FIXTURES=[['ol','cp'],['li','ol'],['li','cp'],['gu','ol'],['gu','cp']];
 let FX=0,savedDuel=null;
 let savedNextRival=null;
 try{
- const saved=JSON.parse(localStorage.getItem('cluss.v1')||'{}');
+ const saved=SRV.get('cluss.v1',{});
  FX=(+saved.fx||0)%LEGACY_FIXTURES.length;
  const activePool=poolForMode();
  if(Array.isArray(saved.duel)&&saved.duel.length===2&&saved.duel.every(k=>activePool[k])&&saved.duel[0]!==saved.duel[1])savedDuel=saved.duel;
@@ -758,20 +883,15 @@ function recentChatTeam(key,now=Date.now()){
  const pick=recentChatPicks.get(key);
  return pick&&now>=pick.t&&now-pick.t<=GIFT_TEAM_WINDOW_MS?pick.team:-1;
 }
-/* ===== ESTADISTICAS INTEGRADAS (todo en este mismo archivo; se guardan en el navegador con localStorage) =====
+/* ===== ESTADISTICAS INTEGRADAS (todo en este mismo archivo; se guardan en el SERVIDOR con la capa SRV) =====
  Registra: torneos y rondas · paises nombrados en el chat (+1 por comentario) · si la ronda tuvo regalos, el log completo del chat.
  REGLA TIKTOK: solo OBSERVA eventos reales. No inventa eventos ni pide ni promete nada a nadie (regla 1). */
 const ST_KEY='cluss.stats',ST_LOG='cluss.log.',MAX_LOGS=15,MAX_CHAT=1500; /* se conservan los logs de las ultimas 15 rondas con regalos */
-const LS={get:(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}},
- set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}},
- del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
+/* BACKEND: LS ya no toca el navegador, delega en SRV (servidor). Claves: cluss.stats, cluss.log.<idRonda>. Ver contrato al inicio del archivo. */
+const LS={get:(k,d)=>SRV.get(k,d),set:(k,v,o)=>SRV.set(k,v,o),del:k=>SRV.del(k)};
 const US_KEY='cluss.users'; /* historial completo por usuario: clave aparte para no inflar el guardado principal */
-const DB=Object.assign({tournaments:[],countries:{},gifts:[],users:{}},LS.get(ST_KEY,{}));DB.users=LS.get(US_KEY,DB.users||{}); /* tournaments · countries{codigo:{name,flag,mentions,users[]}} · gifts[indice de logs] */
-let commentArchiveSummary={updatedAt:null,count:0},activeStatTab=null;
+const DB=Object.assign({tournaments:[],countries:{},gifts:[],users:{}},LS.get(ST_KEY,{}));DB.users={}; /* BACKEND: el historial COMPLETO por usuario vive en el servidor (flujo user-events). Aqui solo hay una ventana corta en RAM para el panel 📊. */ /* tournaments · countries{codigo:{name,flag,mentions,users[]}} · gifts[indice de logs] */
 const dbSave=()=>{const{users,...rest}=DB;return LS.set(ST_KEY,rest)};
-function usSave(){ /* si el navegador se queda sin espacio, descarta los usuarios mas viejos y reintenta */
- let ks;while(!LS.set(US_KEY,DB.users)&&(ks=Object.keys(DB.users)).length>20)ks.sort((a,b)=>DB.users[a].last-DB.users[b].last).slice(0,Math.ceil(ks.length*.1)).forEach(x=>delete DB.users[x]);
-}
 let stTour=DB.tournaments.find(t=>!t.end)||null,stCur=null,stT=null; /* torneo en curso · ronda en curso · temporizador de guardado */
 const stStamp=()=>new Date().toISOString().replace(/[:.]/g,'-').toLowerCase();
 const stHash=s=>{let h=5381;for(const c of s)h=(h*33^c.charCodeAt(0))>>>0;return h.toString(36)}; /* usuarios unicos sin guardar su nombre */
@@ -786,7 +906,7 @@ function stCountry(c,user){ /* +1 mencion por comentario; "users" cuenta persona
  k.mentions++;const h=stHash(user);if(!k.users.includes(h))k.users.push(h);dbSave();
 }
 /* ULTIMOS EVENTOS POR USUARIO (solo reales): guarda los ultimos MAX_UEV de cada usuario (tipo + texto si comento). Solo OBSERVA. */
-const MAX_USERS=500,MAX_UEV=2000;let usT=0; /* historial completo; los topes solo evitan llenar el navegador */
+const MAX_USERS=60,MAX_UEV=60; /* ventana en RAM para el panel; el historial completo se envia al servidor (SRV.log 'user-events') */
 function stUser(e){
  const name=String(e.username||'').trim();if(!name)return;
  const k=name.toLowerCase(),now=Date.now(),u=DB.users[k]||(DB.users[k]={name,last:0,ev:[]});
@@ -798,13 +918,14 @@ function stUser(e){
  if(p&&p.type==='like'&&row.type==='like'&&now-p.t<5000){p.n+=n;p.t=now}else l.push(row); /* los likes en rafaga se juntan en una fila */
  while(l.length>MAX_UEV)l.shift();
  const ks=Object.keys(DB.users);if(ks.length>MAX_USERS)ks.sort((a,b)=>DB.users[a].last-DB.users[b].last).slice(0,ks.length-MAX_USERS).forEach(x=>delete DB.users[x]);
- if(!usT)usT=setTimeout(()=>{usT=0;usSave()},3000);
+ /* BACKEND: cada evento real se agrega al flujo user-events (POST /api/log/user-events, lotes de hasta 200 cada ~5 s) */
+ SRV.log('user-events',Object.assign({u:k,name},row));
 }
 const stNew=duel=>{stCur={id:stStamp(),start:Date.now(),duel:duel||[],chat:[],gifts:[]}};
 function stFlush(winner){ /* escribe el log completo de la ronda (solo si hubo regalos) y actualiza el indice */
  if(!stCur||!stCur.gifts.length)return;
  const c=stCur,row={id:c.id,start:c.start,duel:c.duel,winner:winner||null,gifts:c.gifts.reduce((a,g)=>a+g.count,0),users:new Set(c.gifts.map(g=>g.user)).size};
- LS.set(ST_LOG+c.id,{id:c.id,start:c.start,end:Date.now(),duel:c.duel,winner:winner||null,gifts:c.gifts,chat:c.chat});
+ LS.set(ST_LOG+c.id,{id:c.id,start:c.start,end:Date.now(),duel:c.duel,winner:winner||null,gifts:c.gifts,chat:c.chat},{keep:false}); /* BACKEND: PUT /api/state/cluss.log.<idRonda> (pesado, ~5 s); keep:false = se libera de RAM al llegar al servidor */
  const i=DB.gifts.findIndex(x=>x.id===c.id);if(i<0)DB.gifts.push(row);else DB.gifts[i]=Object.assign(DB.gifts[i],row);
  for(let o;DB.gifts.filter(g=>g.hasLog!==false).length>MAX_LOGS;){o=DB.gifts.find(g=>g.hasLog!==false);LS.del(ST_LOG+o.id);o.hasLog=false} /* borra los logs mas viejos */
  dbSave();
@@ -828,7 +949,7 @@ function stEnd(e){ /* fin de ronda: guarda la ronda en su torneo; con campeon ci
  if(!stCur)stNew(e.duel);
  const c=stCur;stFlush(e.winner);
  if(!stTour){stTour={id:stStamp(),start:c.start,end:null,champion:null,rounds:[]};DB.tournaments.push(stTour)}
- stTour.rounds.push({id:c.id,start:c.start,end:Date.now(),duel:e.duel||c.duel,winner:e.winner||null,gifts:c.gifts.reduce((a,g)=>a+g.count,0),chatMessages:c.chat.length,cupAwarded:e.cupAwarded!==false,log:c.gifts.length?c.id:null});
+ stTour.rounds.push({id:c.id,start:c.start,end:Date.now(),duel:e.duel||c.duel,winner:e.winner||null,gifts:c.gifts.reduce((a,g)=>a+g.count,0),chatMessages:c.chat.length,log:c.gifts.length?c.id:null});
  if(e.champion){stTour.end=Date.now();stTour.champion=e.winner||null;stTour=null}
  dbSave();stCur=null;
 }
@@ -854,9 +975,6 @@ const ST_VIEWS={
  paises(){const c=Object.values(DB.countries).map(v=>({flag:v.flag,name:v.name,mentions:v.mentions,users:v.users.length})).sort((a,b)=>b.mentions-a.mentions);
   const items=c.slice(0,8).map(x=>({l:x.flag+' '+x.name,v:x.mentions})),rest=c.slice(8).reduce((a,x)=>a+x.mentions,0);if(rest)items.push({l:'Otros',v:rest});
   return stPie(items)+(c.length?`<table><tr><th></th><th>Club</th><th>Menciones</th><th>Personas</th></tr>${c.map((x,i)=>`<tr><td style="color:${ST_COL[Math.min(i,8)]}">●</td><td>${x.flag} ${stH(x.name)}</td><td>${x.mentions}</td><td>${x.users}</td></tr>`).join('')}</table><p class="mut">Cada comentario que nombra un club suma 1.</p>`:'')},
- libre(){const teams=freeTournamentStats.teams||[];
-  return teams.length?`<p class="mut">Cada comentario real suma 1 voto. El top 2 pasa al duelo siguiente.</p><table><tr><th>Equipo</th><th>Votos</th><th>Usuarios reales</th></tr>${teams.map(team=>`<tr><td>${stH(team.name)}</td><td>${team.votes}</td><td>${team.users}</td></tr>`).join('')}</table>`:'<p class="mut">Aún no hay equipos. En Torneo Libre, comenta solo el nombre para registrarlo.</p>'},
- comentarios(){return`<p>Comentarios reales guardados: <b>${commentArchiveSummary.count}</b>. No se guarda quién los escribió.</p><p><a href="/api/comment-archive" download="comentarios.json">Descargar JSON</a> · <a href="/api/comment-archive.txt" download="comentarios.txt">Descargar TXT</a></p><p><button type="button" data-reset-archive>🗑️ Vaciar archivo de comentarios</button></p>`},
  usuarios(){const IC={chat:'💬',like:'❤️',gift:'🎁',follow:'➕',share:'↗️',member:'👋'},NM={chat:'comentó',like:'likes',gift:'regalo',follow:'siguió',share:'compartió',member:'se unió'};
   const l=Object.values(DB.users).sort((a,b)=>b.last-a.last);
   return l.length?l.map(u=>{const t=picks.get(u.name.toLowerCase());return`<details data-u="${stH(u.name.toLowerCase())}"><summary><b>${stH(u.name)}</b> <span class="mut">${t!=null&&T[t]?T[t].n+' · ':''}${u.ev.length} eventos · ${stTm(u.last)}</span></summary><div class="ue"></div></details>`}).join(''):'<p class="mut">Todavía no hay usuarios registrados.</p>'},
@@ -864,17 +982,17 @@ const ST_VIEWS={
   return g.length?`<table><tr><th>Fecha</th><th>Duelo</th><th>Ganó</th><th>🎁</th><th></th></tr>${g.map(x=>`<tr><td>${stFd(x.start)}</td><td>${stDuel(x.duel)}</td><td>${stH(stClub(x.winner))}</td><td>${x.gifts}</td><td>${x.hasLog===false?'<span class="mut">sin log</span>':`<button data-log="${x.id}">Ver</button> <button data-dl="${x.id}">⬇</button>`}</td></tr><tr hidden><td colspan="5" id="L${x.id}"></td></tr>`).join('')}</table>`:'<p class="mut">Ninguna ronda tuvo regalos todavía.</p>'}
 };
 /* Panel de estadisticas: cambia de pestana y redibuja su contenido. */
-function stTab(t){activeStatTab=t;const p=document.getElementById('stp');p.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));p.querySelector('.stb').innerHTML=ST_VIEWS[t]()}
+function stTab(t){const p=document.getElementById('stp');p.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));p.querySelector('.stb').innerHTML=ST_VIEWS[t]()}
 let stCloseTimer=0;
 /* Panel de estadisticas: lo cierra. */
-function stClose(){clearTimeout(stCloseTimer);stCloseTimer=0;activeStatTab=null;document.getElementById('stp').hidden=true}
+function stClose(){clearTimeout(stCloseTimer);stCloseTimer=0;document.getElementById('stp').hidden=true}
 /* Panel de estadisticas: lo abre (contiene nombres de usuarios, cerrar antes de mostrar pantalla). */
 function stOpen(t){const p=document.getElementById('stp');clearTimeout(stCloseTimer);p.hidden=false;stTab(t||'torneos');stCloseTimer=setTimeout(stClose,3000)}
 function stLogHtml(L){ /* log completo: cada regalo con su contexto + todo el chat con hora */
  return'<b>Regalos</b><pre>'+stH(L.gifts.map(g=>`${stTm(g.t)} · ${g.user} · ${g.gift} x${g.count} · apoya: ${(g.supports||'?').toUpperCase()} · duelo: ${stDuel(g.duel)}\n   último comentario suyo: ${g.userLastComment?'"'+g.userLastComment.text+'" (hace '+g.userLastComment.secondsBefore+' s)':'ninguno'}`).join('\n'))+'</pre><b>Chat completo</b><pre>'+stH(L.chat.map(m=>`${stTm(m.t)} ${m.user}: ${m.text}`).join('\n'))+'</pre>';
 }
 /* Panel de estadisticas: descarga los datos guardados. */
-function stDownload(id){const L=LS.get(ST_LOG+id);if(!L)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(L,null,1)],{type:'application/json'}));a.download='chat-'+id+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function stDownload(id){SRV.load(ST_LOG+id).then(L=>{if(!L)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(L,null,1)],{type:'application/json'}));a.download='chat-'+id+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)})} /* BACKEND: lee GET /api/state/cluss.log.<idRonda> */
 document.addEventListener('click',e=>{ /* eventos del panel (delegados) */
  const p=document.getElementById('stp');if(!p||p.hidden||!p.contains(e.target))return;
  const b=e.target.closest('button');if(!b)return;
@@ -884,14 +1002,8 @@ document.addEventListener('click',e=>{ /* eventos del panel (delegados) */
   if(!b.dataset.sure){b.dataset.sure=1;b.textContent='¿Seguro? Toca de nuevo';setTimeout(()=>{delete b.dataset.sure;b.textContent='↺ Reiniciar copas'},4000)}
   else{delete b.dataset.sure;b.textContent='↺ Reiniciar copas';window.tortugas.resetCopas();stClose()}
  }
- else if('resetArchive' in b.dataset){
-  if(!confirm('¿Borrar todos los comentarios guardados?'))return;
-  fetch('/api/comment-archive/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true})})
-   .then(async response=>{const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.message||'No se pudo borrar el archivo de comentarios.');commentArchiveSummary=result;stTab('comentarios')})
-   .catch(error=>{console.error(error);toast('No se pudo borrar el archivo de comentarios.','⚠️')});
- }
  else if(b.dataset.dl)stDownload(b.dataset.dl);
- else if(b.dataset.log){const c=document.getElementById('L'+b.dataset.log),r=c.parentNode;r.hidden=!r.hidden;if(!r.hidden){const L=LS.get(ST_LOG+b.dataset.log);c.innerHTML=L?stLogHtml(L):'Log no disponible'}}
+ else if(b.dataset.log){const c=document.getElementById('L'+b.dataset.log),r=c.parentNode;r.hidden=!r.hidden;if(!r.hidden){c.textContent='Cargando…';SRV.load(ST_LOG+b.dataset.log).then(L=>{c.innerHTML=L?stLogHtml(L):'Log no disponible'})}}
 });
 /* historial completo de un usuario: se dibuja solo al abrir su fila (mas reciente primero) */
 document.addEventListener('toggle',e=>{const d=e.target;if(!d.matches||!d.matches('#stp details[data-u]')||!d.open)return;
@@ -1065,7 +1177,6 @@ function handleLiveEntry(entry){
  if(entry.type==='gift')team=recentChatTeam(key);
  /* Todo evento real carga un equipo: se conserva el equipo elegido y, si aun no hay uno, se usa el carril seleccionado. */
  if(team<0&&entry.type==='gift')return;
- if(tournamentMode==='free'&&entry.type==='chat'&&team<0)return;
  if(team<0)team=picks.has(key)?picks.get(key):sel;
  if(entry.type==='chat'){
   const now=Date.now();
@@ -1094,14 +1205,6 @@ function setConnection(status){
 const source=new EventSource('/api/events');
 source.addEventListener('status',event=>setConnection(JSON.parse(event.data)));
 source.addEventListener('update',event=>handleLiveEntry(JSON.parse(event.data).entry));
-source.addEventListener('free-tournament-stats',event=>{
- applyFreeTournamentStats(JSON.parse(event.data));
- if(activeStatTab==='libre'&&!document.getElementById('stp').hidden)stTab('libre');
-});
-source.addEventListener('comment-archive-stats',event=>{
- commentArchiveSummary=JSON.parse(event.data);
- if(activeStatTab==='comentarios'&&!document.getElementById('stp').hidden)stTab('comentarios');
-});
 source.onerror=()=>setConnection({connected:false,status:'reconnecting'});
 fetch('/api/reconnect',{method:'POST'}).then(async response=>{
  if(!response.ok&&response.status!==409){
@@ -1130,14 +1233,14 @@ update();
 /* ############ SECCION 2: CAPAS (audio, XP, nido y podio, corazon, bot, turbo, voz del relator) ############ */
 /* SCRIPT 2 = CAPAS SOBRE EL MOTOR: audio, XP/MVP, enganches a eventos reales, nido de hinchas, corazon, bot, turbo, voz del relator. Cada capa envuelve una funcion del motor (patron _original + wrapper): el ORDEN de los wrappers importa. */
 const P={mus:1,sfx:1,xp:0,wins:[0,0],fx:0,cp:{ol:0,cp:0,li:0,gu:0,lu:0,na:0,sa:0,to:0},best:0,races:0,ach:{},tournamentMode,countryPopularity,countryEntrants,tournamentInteractions};
-try{Object.assign(P,JSON.parse(localStorage.getItem('cluss.v1')||'{}'))}catch(e){}
+try{Object.assign(P,SRV.get('cluss.v1',{}))}catch(e){}
 P.cp=Object.assign({ol:0,cp:0,li:0,gu:0,lu:0,na:0,sa:0,to:0},P.cp||{});
 P.tournamentMode=tournamentMode;
 P.countryPopularity=Object.assign({},countryPopularity,P.countryPopularity||{});
 P.countryEntrants=countryEntrants;
 P.tournamentInteractions=Object.assign({},tournamentInteractions,P.tournamentInteractions||{});
-countryPopularity=P.countryPopularity;tournamentInteractions=P.tournamentInteractions;
-let svT=0,tournamentSaveTimer=0;const save=()=>{try{localStorage.setItem('cluss.v1',JSON.stringify(P))}catch(e){}};
+countryPopularity=P.countryPopularity;tournamentInteractions=P.tournamentInteractions;P.libreVotes=libreVotes; /* mismo objeto: los votos del chat se guardan con P */
+let svT=0,tournamentSaveTimer=0;const save=()=>{try{SRV.set('cluss.v1',P)}catch(e){}}; /* BACKEND: PUT /api/state/cluss.v1 (el cliente junta cambios, maximo 1 PUT por segundo) */
 function saveTournamentProgress(){
  P.countryPopularity=countryPopularity;P.countryEntrants=countryEntrants;P.tournamentInteractions=tournamentInteractions;
  if(tournamentSaveTimer)return;
@@ -1150,36 +1253,19 @@ document.querySelector('.version').before(tournamentButton);
 document.querySelector('.version').setAttribute('aria-label','Límite de taps del turbo y versión 1.2.2');
 document.querySelector('.version').lastChild.textContent=' · v1.2.2';
 function refreshTournamentButton(){tournamentButton.textContent='🏆';tournamentButton.title='Torneo actual: '+TOURNAMENT_LABELS[tournamentMode]+' · cambiar';tournamentButton.setAttribute('aria-label','Cambiar torneo; actual: '+TOURNAMENT_LABELS[tournamentMode])}
-function setFreeTournamentEnabled(enabled){
- fetch('/api/free-tournament/mode',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})})
-  .then(async response=>{const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.message||'No se pudo actualizar el torneo libre.');applyFreeTournamentStats(result.stats);refreshFreePair()})
-  .catch(error=>{console.error(error);toast('No se pudo actualizar el torneo libre.','⚠️')});
-}
-function refreshFreePair(){
- if(tournamentMode!=='free'||matchInteractionCount>0||freeTournamentStats.teams.length<1)return;
- const pair=tournamentIds('free');if(pair.every(id=>DUELO.includes(id)))return;
- BR=brNew('free');const c=brCur();if(!c)return;
- P.br=BR;P.duel=c.duel.slice();P.wins=[0,0];save();
- clearTimeout(rs);aplicarDuelo(c.duel);reset();renderTop3();refreshTournamentButton();
- toast('Torneo libre: '+T[0].n+' vs '+T[1].n,'🆓');
-}
 function startTournament(mode){
  if(!TOURNAMENT_MODES.includes(mode))throw new Error('Tipo de torneo desconocido: '+mode);
  tournamentMode=mode;if(mode==='countries')countryEntrants=[];
  BR=brNew(mode);const c=brCur();
  P.tournamentMode=mode;P.countryEntrants=countryEntrants;P.countryPopularity=countryPopularity;
  P.tournamentInteractions=tournamentInteractions;P.br=BR;P.duel=c.duel.slice();P.wins=[0,0];save();
- setFreeTournamentEnabled(mode==='free');
  clearTimeout(rs);aplicarDuelo(c.duel);reset();renderTop3();refreshTournamentButton();
- if(mode==='free'&&freeTournamentStats.teams.length<2)toast('Torneo libre: comenta nombres de equipos para registrarlos','🆓');
- else{toast('Torneo: '+TOURNAMENT_LABELS[mode],'🏆');hype('🏆',TOURNAMENT_LABELS[mode],' · '+T[0].n+' vs '+T[1].n,'#ffd566')}
+ toast('Torneo: '+TOURNAMENT_LABELS[mode],'🏆');
+ hype('🏆',TOURNAMENT_LABELS[mode],' · '+T[0].n+' vs '+T[1].n,'#ffd566');
 }
 refreshTournamentButton();
 tournamentButton.onclick=()=>startTournament(TOURNAMENT_MODES[(TOURNAMENT_MODES.indexOf(tournamentMode)+1)%TOURNAMENT_MODES.length]);
-window.clussTorneo={start:startTournament,toast:(m,ic)=>toast(m,ic),modo:()=>tournamentMode,refreshFree:refreshFreePair}; /* lo usa el boton TORNEO (🔄/🔒) de herramientas */
-fetch('/api/free-tournament/stats').then(async response=>{if(!response.ok)throw new Error('No se pudieron cargar los votos del torneo libre.');applyFreeTournamentStats(await response.json());refreshFreePair()}).catch(error=>console.error(error));
-fetch('/api/comment-archive/stats').then(async response=>{if(!response.ok)throw new Error('No se pudo cargar el archivo de comentarios.');commentArchiveSummary=await response.json()}).catch(error=>console.error(error));
-setFreeTournamentEnabled(tournamentMode==='free');
+window.clussTorneo={start:startTournament,toast:(m,ic)=>toast(m,ic),modo:()=>tournamentMode}; /* lo usa el boton TORNEO (🔄/🔒) de herramientas */
 
 /* ===== AUDIO (WebAudio sintetizado, sin archivos externos) ===== */
 const A=(()=>{
@@ -1327,6 +1413,19 @@ T.forEach((t,i)=>$('#sv'+i).insertAdjacentHTML('beforeend','<div class="nest" id
 const HINCHAS_JSON=[ /* editar aqui. Formato: {username:'maria_ol', avatar:'https://...jpg', team:'ol'}  (team opcional: 'ol' o 'cp'; avatar debe ser https) */ ];
 /* ===== CONTADOR TAP TAP: todo evento suma su peso; al completar el limite dinamico activa TURBO (8 s), sin avance directo ===== */
 let HEART_N=50,heartLimitOffset=0; /* todas las carreras arrancan con 50 taps */
+/* NIVEL: sube 1 cada vez que el limite de taps aumenta (record de la carrera). Voz: "Subiste a nivel N". Se muestra junto al menu (boton cluss). Se reinicia en cada carrera. */
+let tapLevel=1,tapLevelMaxN=50;
+const lvBadge=document.createElement('span');lvBadge.id='nivelBadge';lvBadge.setAttribute('role','status');
+document.getElementById('connection').after(lvBadge);
+function paintLevel(){lvBadge.textContent='Nv '+tapLevel;lvBadge.setAttribute('aria-label','Nivel '+tapLevel)}
+function levelUp(){
+ tapLevel++;paintLevel();lvBadge.classList.remove('up');void lvBadge.offsetWidth;lvBadge.classList.add('up');
+ const txt='Subiste a nivel '+tapLevel;
+ try{toast(txt,'🆙')}catch(e){}
+ try{A.sfx('lvl')}catch(e){}
+ try{if(P.vo)speak(txt,null,true);else say(txt)}catch(e){}
+}
+paintLevel();
 const HEART_TURBO_PROGRESS=3,heart=T.map(()=>0);
 function heartLimitStep(){
  const active=DUELO,finalRound=brCur()&&brCur().k===BR.r.length-2;
@@ -1339,6 +1438,7 @@ function syncHeartLimit(){
  if(n===HEART_N)return;
  HEART_N=Math.min(10000,n);
  T.forEach((_,i)=>renderHeart(i));
+ if(HEART_N>tapLevelMaxN){tapLevelMaxN=HEART_N;levelUp()}
 }
 window.syncHeartLimit=syncHeartLimit;
 /* Dibuja el corazon (barra de likes) del equipo t. */
@@ -1416,7 +1516,7 @@ T.forEach((_,i)=>renderNest(i));
 const EI={chat:['💬','#8b8f99'],like:['❤️','#ff5a7a'],follow:['➕','#2f9bd6'],share:['↗️','#2f9bd6'],gift:['🎁','#e11d48'],member:['👋','#16a34a']},evT=[],evL=[];
 $('.board').insertAdjacentHTML('beforeend','<div class="ev" id="evg" hidden></div>'); /* alerta de quien se une sin equipo: avatar grande al centro */
 /* PUNTAJE POR USUARIO: cada evento real lo aumenta. */
-const userScore=new Map(),SCORE={member:1,chat:5,like:1,follow:3,share:3,gift:0};window.__userScore=userScore;
+const userScore=new Map(),SCORE={member:1,chat:5,like:1,follow:3,share:3,gift:0};window.__userScore=userScore; /* v11: lo lee el cuadro de usuarios */
 /* Devuelve la clave del usuario con mas puntos del equipo t (aro dorado en el nido). */
 function topOf(t){let b=null,m=0;(recent[t]||[]).forEach(x=>{const s=userScore.get(x.key)||0;if(s>m){m=s;b=x.key}});return b}
 /* Alerta: el avatar GRANDE del usuario que genero el evento (t = indice de equipo, o 'g' para quien se une sin equipo). Despues de ~1.7 s baja al nido */
@@ -1512,8 +1612,7 @@ fetch('/api/recent-users').then(async response=>{
 const _sc=showCombo;
 showCombo=function(){if(streak===0){if(lastStreak>=3)A.sfx('break');pm=1}lastStreak=streak;_sc()};
 const _win=win;
-win=function(i,options){
- const timedOut=!!(options&&options.timedOut);
+win=function(i){
  const first=!over,cur0=brCur(),isFinal=!!cur0&&cur0.k===BR.r.length-2;_win(i);if(!first)return;
  P.wins[i]++;P.races++;addXp(20);
  if(sel===i){addXp(50);ach('pick')}
@@ -1525,31 +1624,31 @@ win=function(i,options){
  if(h){const d=document.createElement('div');d.className='plate';d.style.cssText='padding:6px 12px;font-size:11px;text-align:center;white-space:pre-line';
   d.textContent=(m?'MVP: '+who(m[0])+' · '+m[1]+' pts\n':'')+P.wins.slice(0,T.length).map((w,k)=>T[k].n+' '+w).join(' · ')+(sel===i?'\n¡Tu equipo ganó! +50 XP':'');
   h.after(d)}
- logStat({type:'round-end',winner:T[i].id,duel:DUELO,champion:isFinal,cupAwarded:TAP_POLICY.shouldAwardCup(isFinal,timedOut)}); /* guarda la ronda (y cierra el torneo si hay campeon) */
- if(P.wins[i]>=CUPS)champion(i,{timedOut});
+ logStat({type:'round-end',winner:T[i].id,duel:DUELO,champion:isFinal}); /* guarda la ronda (y cierra el torneo si hay campeon) */
+ if(P.wins[i]>=CUPS)champion(i);
  hud();
 };
 const CUPS=1; /* un solo partido por club y ronda */
 /* Termina un partido: el ganador avanza en el cuadro. En la final, campeon del torneo y sorteo nuevo. */
-function champion(i,{timedOut=false}={}){
+function champion(i){
  clearTimeout(rs);
  const id=T[i].id,c=brCur(),finalRound=BR.r.length-2,fin=!!c&&c.k===finalRound;
- const cupAwarded=TAP_POLICY.shouldAwardCup(fin,timedOut);
  brWin(id);
  if(c&&c.k===finalRound-1&&BR.r[finalRound].every(Boolean)){
   BR.r[finalRound]=interactionFinalists();
  }
  P.br=BR;P.tournamentInteractions=tournamentInteractions;
- if(cupAwarded)P.cp[id]=(P.cp[id]||0)+1;save();
+ if(fin&&!lowActivityFinished)P.cp[id]=(P.cp[id]||0)+1;save(); /* terminada por inactividad: gana y avanza, pero NO suma copa */
  const w=$('#win'),h=w.querySelector('h2');
- if(h)h.innerHTML=fin?(cupAwarded?'¡CAMPEÓN<br>'+T[i].n+'!':'¡VICTORIA<br>'+T[i].n+'!'):'¡'+T[i].n+'<br>AVANZA!';
+ const libre=tournamentMode==='libre';
+ if(h)h.innerHTML=libre?'¡'+T[i].n+'<br>GANA LA CARRERA!':fin?'¡CAMPEÓN<br>'+T[i].n+'!':'¡'+T[i].n+'<br>AVANZA!';
  const t=document.createElement('div');t.className='plate';t.style.cssText='padding:6px 12px;font-size:'+(fin?16:13)+'px;text-align:center';
- t.textContent=fin?(cupAwarded?'🏆 ¡GANÓ EL TORNEO!':'⏱️ Victoria por tiempo · no suma copa'):'➡️ Pasa a '+roundName(c.k+1);
+ t.textContent=lowActivityFinished?'⏱ Gana por inactividad · sin copa':libre?'🏆 Siguiente: los más votados del chat':fin?'🏆 ¡GANÓ EL TORNEO!':'➡️ Pasa a '+roundName(c.k+1);
  if(h)h.after(t);
- const bt=$('#again');if(bt){bt.textContent=fin?'NUEVO TORNEO':'SIGUIENTE PARTIDO';bt.onclick=()=>nextMatch()}
- if(cupAwarded){const cols=['#ffd34d','#e11d48','#3ddc5a','#5ec3f2','#fff'];
+ const bt=$('#again');if(bt){bt.textContent=fin&&!libre?'NUEVO TORNEO':'SIGUIENTE PARTIDO';bt.onclick=()=>nextMatch()}
+ if(fin&&!lowActivityFinished){const cols=['#ffd34d','#e11d48','#3ddc5a','#5ec3f2','#fff'];
   w.insertAdjacentHTML('beforeend',Array.from({length:40},()=>'<span class="cf" style="left:'+(Math.random()*100)+'%;background:'+cols[Math.floor(Math.random()*5)]+';animation-delay:'+(Math.random()*2)+'s"></span>').join(''))}
- toast(cupAwarded?'¡'+T[i].n+' es el campeón del torneo!':timedOut?'Victoria por tiempo; no suma copa':T[i].n+' avanza',cupAwarded?'🏆':timedOut?'⏱️':'➡️');
+ toast(lowActivityFinished?T[i].n+' gana por inactividad (sin copa)':libre?T[i].n+' gana la carrera':fin?'¡'+T[i].n+' es el campeón del torneo!':T[i].n+' avanza',fin?'🏆':'➡️');
  renderTop3();
  rs=setTimeout(nextMatch,fin?7000:5000);
 }
@@ -1557,12 +1656,9 @@ function champion(i,{timedOut=false}={}){
 function nextMatch(){
  clearTimeout(rs);
  if(!brCur()){
-  if(tournamentMode==='free')BR=brNew('free');
-  else{
-   tournamentMode=TOURNAMENT_MODES[(TOURNAMENT_MODES.indexOf(tournamentMode)+1)%TOURNAMENT_MODES.length];
-   if(tournamentMode==='countries')countryEntrants=[];
-   BR=brNew(tournamentMode);P.tournamentMode=tournamentMode;
-  }
+  tournamentMode=TOURNAMENT_MODES[(TOURNAMENT_MODES.indexOf(tournamentMode)+1)%TOURNAMENT_MODES.length];
+  if(tournamentMode==='countries')countryEntrants=[];
+  BR=brNew(tournamentMode);P.tournamentMode=tournamentMode;
  }
  const c=brCur(),duel=c.duel;
  P.wins=[0,0];P.best=0;P.br=BR;P.duel=duel.slice();P.tournamentMode=tournamentMode;
@@ -1574,7 +1670,7 @@ function nextMatch(){
 /* ===== RESET DE COPAS (boton "Reiniciar copas" del panel de estadisticas): top 3, copas y torneo vuelven a cero, y arranca una carrera nueva.
  NO borra el historial guardado en las estadisticas; solo cierra el torneo en curso sin campeon. ===== */
 function resetCopas(){
- P.wins=[0,0];Object.keys(Object.assign({},POOL,COUNTRY_POOL,CHAMPIONS_POOL,LIBERTADORES_POOL,AMERICA_POOL,ELITE_POOL,FREE_POOL)).forEach(k=>P.cp[k]=0);P.races=0;P.best=0;FX=0;P.fx=0;BR=brNew();P.br=BR;P.tournamentMode=tournamentMode;P.countryEntrants=countryEntrants;P.countryPopularity=countryPopularity;P.tournamentInteractions=tournamentInteractions;{const d=brCur().duel;P.duel=d.slice();save();aplicarDuelo(d)}
+ P.wins=[0,0];Object.keys(Object.assign({},POOL,COUNTRY_POOL,CHAMPIONS_POOL,LIBERTADORES_POOL,AMERICA_POOL,ELITE_POOL)).forEach(k=>P.cp[k]=0);P.races=0;P.best=0;FX=0;P.fx=0;BR=brNew();P.br=BR;P.tournamentMode=tournamentMode;P.countryEntrants=countryEntrants;P.countryPopularity=countryPopularity;P.tournamentInteractions=tournamentInteractions;{const d=brCur().duel;P.duel=d.slice();save();aplicarDuelo(d)}
  clearTimeout(rs);reset();renderTop3();stCloseTour();
  toast('Copas reiniciadas: todo empieza de cero','🔄');
 }
@@ -1582,7 +1678,7 @@ const _reset=reset;
 reset=function(){ajustesDePartida();seen.clear();known.clear();userScore.clear();recent.forEach(l=>l.length=0);fanTurn++;gs.fill(2);T.forEach((_,i)=>{$('#ev'+i).hidden=true;heart[i]=0;renderHeart(i);$('#in'+i).style.setProperty('--s',2);renderNest(i);renderPod(i)});voReset();contrib.clear();us.clear();joined.clear();turbo.fill(0);turboPower.fill(0);giftTurboUntil.fill(0);lastMvp=null;hy.hidden=true;T.forEach((_,i)=>$('#ln'+i).classList.remove('turbo'));leads=0;sprint=false;pm=1;lastStreak=0;tk=0;$('#app').classList.remove('sprint');_reset();A.sfx('start');hud();logStat({type:'round-start',duel:DUELO});toast(T[0].n+'  ·  '+T[1].n,'💬')}; /* ronda nueva en las estadisticas */
 window.tortugas.reset=reset;window.tortugas.resetCopas=resetCopas;
 const _resetTurboLimit=reset;
-reset=function(){heartLimitOffset=0;HEART_N=50;realEv.length=0;matchInteractionCount=0;raceStartedAt=Date.now();lastInteractionAt=raceStartedAt;lowActivityFinished=false;_resetTurboLimit();syncHeartLimit()};
+reset=function(){heartLimitOffset=0;HEART_N=50;tapLevel=1;tapLevelMaxN=50;paintLevel();realEv.length=0;matchInteractionCount=0;raceStartedAt=Date.now();lastInteractionAt=raceStartedAt;lowActivityFinished=false;_resetTurboLimit();syncHeartLimit()};
 window.tortugas.reset=reset;
 /* Boton ↺ de la barra de herramientas: doble toque (el primero lo arma y brilla 4 s, el segundo reinicia las copas) */
 let rsArm=0;
@@ -1664,19 +1760,19 @@ const idleStat=document.createElement('div');
 idleStat.className='st';idleStat.dataset.k='idle';idleStat.title='Tiempo restante sin interacción';
 idleStat.innerHTML='<b>⏳</b><span id="idleCountdown" aria-live="off">60s</span>';
 document.getElementById('evs').appendChild(idleStat);
-/* Límite de taps actual; al completarlo se activa el turbo. */
+/* v11: limite de taps actual (HEART_N): al llenarlo se activa el turbo */
 const limStat=document.createElement('div');
 limStat.className='st';limStat.dataset.k='lim';limStat.title='Límite de taps actual (al completarlo se activa el turbo)';
 limStat.innerHTML='<b>🎯</b><span id="tapLimit">50</span>';
 document.getElementById('evs').insertBefore(limStat,idleStat);
 /* Formato compacto de numeros (1.2K) */
-const stFmt=TAP_POLICY.formatStatCount;
+const stFmt=n=>n<1000?String(n):n<999500?(n<10000?(n/1000).toFixed(1).replace(/\.0$/,''):String(Math.round(n/1000)))+'K':(n<1e7?(n/1e6).toFixed(1).replace(/\.0$/,''):String(Math.round(n/1e6)))+'M';
 const _hleSt=handleLiveEntry;
 handleLiveEntry=function(e){
  try{if(e&&!e.bot&&['member','chat','gift','like','follow','share'].includes(e.type))stUser(e)}catch(x){console.error(x)}
  try{if(e&&!e.bot&&TAP_POLICY.isInteractionEvent(e.type)){const eventAt=Date.now();realEv.push(eventAt);lastInteractionAt=eventAt;matchInteractionCount++} /* solo interacciones, no ingresos al LIVE */
   if(e&&!e.bot&&e.type in ST){
-  const n=TAP_POLICY.statEventDelta(e.type,e.activityCount);
+  const n=(e.type==='like'||e.type==='gift')?Math.max(1,+e.activityCount||1):1;
   ST[e.type]+=n;const el=document.querySelector('.st[data-k="'+e.type+'"]');
   if(el){el.querySelector('span').textContent=stFmt(ST[e.type]);el.classList.remove('up');void el.offsetWidth;el.classList.add('up')}
  }}catch(x){console.error(x)}
@@ -1696,11 +1792,12 @@ function realEventRatePerSecond(now=Date.now()){
  const elapsed=Math.max(1000,Math.min(60000,now-raceStartedAt));
  return realEpm(now)/(elapsed/1000);
 }
-/* Cuenta regresiva fija de 60 s; solo las interacciones reales la reinician. */
-const IDLE_LIMIT_MS=60000;
+/* v11: CUENTA REGRESIVA FIJA. 60 s que retroceden; cada interaccion real (comentario, like, regalo, seguir, compartir) la devuelve a 60; al llegar a 0 la carrera termina (finishForLowActivity). */
+const IDLE_BASE_MS=60000,IDLE_ADV_MS=120000,IDLE_ADV_MIN=1000; /* plazo normal 60 s; con mas de 1000 interacciones reales en el partido, hasta 120 s */
+function idleLimitMs(){return matchInteractionCount>IDLE_ADV_MIN?IDLE_ADV_MS:IDLE_BASE_MS}
 function renderInactivityCountdown(now=Date.now()){
  {const tl=document.getElementById('tapLimit');if(tl){const t=stFmt(HEART_N);if(tl.textContent!==t)tl.textContent=t}}
- const seconds=TAP_POLICY.inactivityRemainingSeconds(now-lastInteractionAt,IDLE_LIMIT_MS);
+ const lim=idleLimitMs(),seconds=Math.max(0,Math.min(lim/1000,Math.ceil((lim-(now-lastInteractionAt))/1000)));
  const counter=$('#idleCountdown'),text=seconds+'s';
  if(counter){if(counter.textContent!==text)counter.textContent=text;if(counter.parentNode)counter.parentNode.classList.toggle('low',seconds<=10&&!over)}
 }
@@ -1724,12 +1821,12 @@ T.forEach((_,i)=>$('#in'+i).insertAdjacentHTML('afterbegin','<g class="tf"><path
 const tz=(m,ic)=>{if(tq.length<3)toast(m,ic)};
 const turboOn=(t,ms,power=TURBO_PPS)=>{const n=performance.now(),active=turbo[t]>n;turbo[t]=Math.min(n+60000,Math.max(n,turbo[t])+ms);turboPower[t]=active?Math.max(turboPower[t],power):power};
 function finishForLowActivity(now=Date.now()){
- if(over||lowActivityFinished||now-lastInteractionAt<IDLE_LIMIT_MS)return;
+ if(over||lowActivityFinished||now-lastInteractionAt<idleLimitMs())return; /* sin interaccion REAL (los 'member' no cuentan) por 60 s, o 120 s si hay mas de 1000 interacciones: termina la carrera */
  lowActivityFinished=true;
  const winner=lead>=0?lead:Math.max(0,update());
  turboOn(winner,HEART_TURBO_MS,TURBO_PPS);
  $('#ln'+winner).classList.add('turbo');
- S[winner].p=100;lead=update();win(winner,{timedOut:true});
+ S[winner].p=100;lead=update();win(winner);
 }
 function giftTurboOn(t,count){giftTurboUntil[t]=Math.max(performance.now(),giftTurboUntil[t])+GIFT_TURBO_MS*count}
 setInterval(()=>{
@@ -1802,7 +1899,7 @@ function perks(e){
  const mv=mvp();
  if(mv&&mv[0]!==lastMvp&&mv[1]>=10){
   const first=lastMvp===null,key=String(mv[0]).toLowerCase(),fan=known.get(key);
-  const teamIndex=contribTeam.has(key)?contribTeam.get(key):(fan?fan.t:-1),team=T[teamIndex];
+  const teamIndex=contribTeam.has(key)?contribTeam.get(key):(fan&&fan.t>=0?fan.t:(picks.has(key)?picks.get(key):-1)),team=T[teamIndex]; /* equipo o pais: aporte de la ronda, hincha registrado o ultimo equipo nombrado en el chat */
   const name=String(fan&&fan.name||mv[0]).replace(/[_.]+/g,' ');
   const club=team?cap(team.n):'';
   const greeting=club?'Saludamos al hincha destacado de '+club+', '+name:'Saludamos al hincha destacado, '+name;
@@ -1916,10 +2013,10 @@ say=function(t){
   speak(t.replace(/\s*\+\d+/,'').replace(/[A-ZÁÉÍÓÚÑ]{3,}/g,w=>w[0]+w.slice(1).toLowerCase()),null,false);
 };
 /* Guiones de voz de bienvenida. */
-const dinamicaTxt=()=>'Bienvenidos al duelo '+cap(T[0].n)+' contra '+cap(T[1].n)+'. Aquí cada hincha cuenta: escribe el nombre de tu club y aparece tu nombre en pantalla. ¡Gana el primero que llegue a la meta!';
-const dinamicaTxt_old=()=>'Bienvenidos a la carrera de tortugas, '+cap(T[0].n)+' contra '+cap(T[1].n)+'. Escribe en el chat el nombre de tu club para jugar; si escribes el club contrario, cambias de equipo. Cada interaccion suma taps al contador de tu equipo. Al completar el contador se activa el turbo; los regalos reales avanzan 10% y activan 15 segundos de turbo. ¡Gana el primero que llegue a la meta!';
+const dinamicaTxt=()=>'Bienvenidos al duelo '+cap(T[0].n)+' contra '+cap(T[1].n)+'. Aquí cada hincha cuenta: escribe el nombre de tu equipo para apoyar a tu equipo. ¡Gana el primero que llegue a la meta!';
+const dinamicaTxt_old=()=>'Bienvenidos a la carrera de tortugas, '+cap(T[0].n)+' contra '+cap(T[1].n)+'. Escribe en el chat el nombre de tu equipo para jugar; si escribes el equipo contrario, cambias de equipo. Cada interaccion suma taps al contador de tu equipo. Al completar el contador se activa el turbo; los regalos reales avanzan 10% y activan 15 segundos de turbo. ¡Gana el primero que llegue a la meta!';
 const VL=[
- {id:'intro',at:2,s:'Así se juega: tu club en el chat.',v:[dinamicaTxt]},
+ {id:'intro',at:2,s:'Así se juega: tu equipo en el chat.',v:[dinamicaTxt]},
  {id:'tap',once:true,at:55,s:'Contador tap tap',v:['Los eventos suman taps con distintos pesos y activan el turbo al completar el contador. Cada regalo da 10% y un turbo de 15 segundos que reparte 6% en total.','Cada evento carga el contador y, al completarlo, activa turbo. Cada regalo da 10% y un turbo de 15 segundos con 6% en total.']},
 ];
 const VF=['¡Recta final! Todo se decide ahora. ¡Vamos, tortugas!','¡Llegando a la meta! ¡Qué emoción, esto está parejísimo!'];
@@ -1929,8 +2026,8 @@ const ENGAGEMENT_CALLS={
  50:'Para activar el modo turbo, envía una rosita real. Los regalos reales también avanzan la pista.',
  75:'Para ganar este partido, envía una Pistola de dinero a tu equipo.',
 };
-VL[0].s='Inicio de carrera';VL[0].v=[()=>'Bienvenidos al duelo '+cap(T[0].n)+' contra '+cap(T[1].n)+'. Aquí cada hincha cuenta: escribe el nombre de tu club y aparece tu nombre en pantalla. ¡Gana el primero que llegue a la meta!'];VL[0].v_old=[()=>'Bienvenidos a '+cap(T[0].n)+' contra '+cap(T[1].n)+'. Cada interaccion carga el contador del equipo; al completarlo, activa el turbo. Los regalos reales avanzan la pista y activan turbo. ¡Gana quien llegue primero a la meta!'];
-VL[1].s='Contador';VL[1].v=['Cada hincha que escribe su club hace avanzar a su tortuga.','Aquí se reconoce a cada hincha por su nombre.'];
+VL[0].s='Inicio de carrera';VL[0].v=[()=>'Bienvenidos al duelo '+cap(T[0].n)+' contra '+cap(T[1].n)+'. Aquí cada hincha cuenta: escribe el nombre de tu equipo para apoyar a tu equipo. ¡Gana el primero que llegue a la meta!'];VL[0].v_old=[()=>'Bienvenidos a '+cap(T[0].n)+' contra '+cap(T[1].n)+'. Cada interaccion carga el contador del equipo; al completarlo, activa el turbo. Los regalos reales avanzan la pista y activan turbo. ¡Gana quien llegue primero a la meta!'];
+VL[1].s='Contador';VL[1].v=['Cada hincha que escribe su equipo hace avanzar a su tortuga.','Escribe el nombre de tu equipo en el chat para apoyarlo.'];
 /* Entrega un pedido a la vez, en orden, aunque el avance salte varios hitos. */
 function nextEngagementCall(progress,done){
  const percent=ENGAGEMENT_AT.find(value=>Math.max(...progress)>=value&&!done.has('engagement'+value));
@@ -2032,7 +2129,7 @@ if ('serviceWorker' in navigator)
 (function(){var a=document.getElementById('app');function fit(){var k=Math.min(innerWidth/416,innerHeight/746);a.style.transform='translate('+((innerWidth-416*k)/2)+'px,'+((innerHeight-746*k)/2)+'px) scale('+k+')'}addEventListener('resize',fit);fit()})();
 </script>
 <script>
-(function(){try{if(sessionStorage.getItem('tortu.attn'))return;sessionStorage.setItem('tortu.attn','1')}catch(e){}
+(function(){if(window.__tortuAttn)return;window.__tortuAttn=1; /* solo animacion: sin almacenamiento local */
 document.querySelectorAll('.cta:not(:disabled)').forEach((b,i)=>setTimeout(()=>{b.classList.add('attn');setTimeout(()=>b.classList.remove('attn'),2000)},1500+i*350))})();
 </script>
 <style>
@@ -2298,7 +2395,7 @@ document.addEventListener('visibilitychange',()=>FA.vis(!document.hidden));
 FA.init();
 
 /* ---------- Pips de copas del torneo (3 por carril), leidos del guardado ---------- */
-function wins(){try{return JSON.parse(localStorage.getItem('cluss.v1')||'{}').wins||[]}catch(e){return[]}}
+function wins(){try{return SRV.get('cluss.v1',{}).wins||[]}catch(e){return[]}}
 const pips=[],pipN=[];
 T.forEach((t,i)=>{const l=document.getElementById('ln'+i);if(!l)return;const e=document.createElement('span');e.className='fxp';e.setAttribute('aria-hidden','true');e.innerHTML='<i></i><i></i><i></i>';l.appendChild(e);pips[i]=e;pipN[i]=0});
 /* Copas: sincroniza los puntos (pips) de copas bajo cada bandera. */
@@ -2347,7 +2444,7 @@ push=function(i,type,n,m){
 
 const _win=win;
 win=function(i){
- const first=!over,ps=S.map(s=>s.p);_win.apply(this,arguments);
+ const first=!over,ps=S.map(s=>s.p);_win(i);
  if(!first)return;
  clearTimeout(bt);bs.forEach(x=>x.classList.remove('on')); /* el banner de hito no tapa la pantalla de ganador */
  const rest=Math.max(...ps.filter((_,j)=>j!==i)),photo=Math.min(100,ps[i])-rest<=3;
@@ -2410,7 +2507,7 @@ setInterval(()=>{
 /* API para pruebas por consola: fx.confetti(), fx.champion(), fx.banner('texto') */
 window.fx={confetti(){cannon(0,746,-62,40,820,16);cannon(416,746,-118,40,820,16);rain(40);FA.p('win')},
  champion(){[[.5,.3],[.2,.42],[.8,.38]].forEach(([x,y],k)=>setTimeout(()=>firework(x*416,y*746),k*500));FA.p('champ')},
- banner};
+ banner,cannon,burst,ring,flash,emojis,firework,rain,FA,laneP};
 })();
 </script>
 <!-- ===== CAPA MOVIL v3 (pantalla completa 9:16, zonas seguras de TikTok, botones de 44px, pantalla de inicio). Editar SAFE_TOP / SAFE_BOTTOM abajo. ?safe=0 las quita; ?auto=1 salta la pantalla de inicio ===== -->
@@ -2648,7 +2745,8 @@ button:disabled{filter:grayscale(.55) brightness(.85);cursor:not-allowed}
 /* ---------- 1) ESCUDOS Y BANDERAS ---------- */
 const WIKI={ol:'Club_Olimpia',cp:'Cerro_Porteño',li:'Club_Libertad',gu:'Club_Guaraní',lu:'Sportivo_Luqueño',na:'Club_Nacional_(Paraguay)',sa:'Club_Sol_de_América',to:'12_de_Octubre_Football_Club'};
 const cssUrl=k=>{try{const v=getComputedStyle(document.documentElement).getPropertyValue('--crest-'+k);const m=v.match(/url\(\s*["']?([^"')]+)["']?\s*\)/);return m?m[1]:''}catch(e){return''}};
-const lsGet=k=>{try{return localStorage.getItem('cluss.crest.'+k)||''}catch(e){return''}},lsSet=(k,v)=>{try{localStorage.setItem('cluss.crest.'+k,v)}catch(e){}};
+/* BACKEND: cache de escudos en la clave cluss.crest.<id> (string con la URL) */
+const lsGet=k=>{try{return SRV.get('cluss.crest.'+k,'')||''}catch(e){return''}},lsSet=(k,v)=>{try{SRV.set('cluss.crest.'+k,v)}catch(e){}};
 const list=k=>{if(/^ct-/.test(k)){const c=k.slice(3),m={en:'gb-eng',wl:'gb-wls',sc:'gb-sct',ni:'gb-nir'};return['https://flagcdn.com/w160/'+(m[c]||c)+'.png']}
  const a=['flags/'+k+'.png','flags/'+k+'.svg'],u=cssUrl(k),w=lsGet(k);if(u)a.push(u);if(w)a.push(w);return a};
 const wp={};
@@ -2732,23 +2830,38 @@ pinta();setInterval(pinta,1500);
 </style>
 <script>
 (function(){
-const M=TOURNAMENT_MODES.slice(),L=TOURNAMENT_LABELS,SHORT={libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'MUNDIAL',america:'AMÉRICA',elite:'ELITE',free:'LIBRE'};
-let lock='free';try{const v=localStorage.getItem('cluss.torneoLock');if(v==='auto')lock=null;else if(M.includes(v))lock=v;else localStorage.setItem('cluss.torneoLock','free')}catch(e){}
+const M=TOURNAMENT_MODES.slice(),L=TOURNAMENT_LABELS,SHORT={libre:'LIBRE',libertadores:'LIBERTADORES',champions:'CHAMPIONS',countries:'MUNDIAL',america:'AMÉRICA',elite:'ELITE'};
+let lock='libre';try{const v=SRV.get('cluss.torneoLock',null);if(v==='auto')lock=null;else if(M.includes(v))lock=v}catch(e){} /* por defecto: TORNEO LIBRE bloqueado */
 const foot=document.querySelector('#topbar .foot')||document.querySelector('.foot');if(!foot)return;
 const b=document.createElement('button');b.id='bTorneoSel';b.type='button';
 const fila=document.createElement('div');fila.id='filaVT';const ver=document.querySelector('.version');
 fila.appendChild(b);if(ver)fila.appendChild(ver);foot.appendChild(fila); /* torneo + version/limite de taps en la misma fila */
 function pinta(){b.textContent=lock?'🔒 '+SHORT[lock]:'🔄 TORNEO: AUTO';b.classList.toggle('lock',!!lock);
  const d=lock?'Torneo fijo: '+L[lock]:'Torneo automático (rota solo al terminar cada copa)';b.title=d+' · tocar para cambiar';b.setAttribute('aria-label',d+'. Tocar para cambiar')}
-function guarda(){try{localStorage.setItem('cluss.torneoLock',lock||'auto')}catch(e){}}
+function guarda(){try{SRV.set('cluss.torneoLock',lock||'auto')}catch(e){}} /* BACKEND: PUT /api/state/cluss.torneoLock */
 /* fijo = la lista de torneos queda con uno solo, asi la rotacion del juego siempre vuelve a el; AUTO = lista completa */
 function lista(){TOURNAMENT_MODES.splice(0,TOURNAMENT_MODES.length,...(lock?[lock]:M))}
-b.onclick=()=>{const seq=[null,...M];lock=seq[(seq.indexOf(lock)+1)%seq.length];guarda();pinta();
+b.onclick=()=>{const seq=[...M,null];lock=seq[(seq.indexOf(lock)+1)%seq.length];guarda();pinta();
  TOURNAMENT_MODES.splice(0,TOURNAMENT_MODES.length,...M); /* lista completa para poder arrancar el torneo */
  const CT=window.clussTorneo;try{if(lock&&CT&&lock!==CT.modo())CT.start(lock);else if(CT)CT.toast(lock?'Torneo fijo: '+L[lock]:'Torneo automático','🏆')}catch(e){}
  lista()};
 pinta();
 if(lock&&window.clussTorneo&&lock!==window.clussTorneo.modo()){TOURNAMENT_MODES.splice(0,TOURNAMENT_MODES.length,...M);setTimeout(()=>{try{window.clussTorneo.start(lock)}catch(e){}lista()},800)}else lista();
+})();
+</script>
+<!-- ===== TORNEO LIBRE: votos del chat REAL (sin bots). Cada comentario que nombra un equipo que NO corre le suma 1 voto para la proxima carrera (1 comentario con voto cada 8 s por usuario). No toca el contador ni la pista: todo evento que no es regalo sigue yendo solo al contador de taps. Para quitar: borrar este bloque. ===== -->
+<script>
+(function(){
+const _h=handleLiveEntry,ultimo=new Map();
+handleLiveEntry=function(e){
+ try{
+  if(e&&!e.bot&&e.type==='chat'&&tournamentMode==='libre'){
+   const u=String(e.username||'').trim().toLowerCase(),now=Date.now();
+   if(u&&now-(ultimo.get(u)||0)>=8000){const antes=Object.assign({},libreVotes);if(libreVote(e.content)){ultimo.set(u,now);try{const ids=Object.keys(libreVotes).filter(id=>(libreVotes[id]||0)>(antes[id]||0));if(window.libreArchive)window.libreArchive.vote(u,ids)}catch(_){}if(typeof saveTournamentProgress==='function')saveTournamentProgress()}}
+  }
+ }catch(x){console.error(x)}
+ return _h.apply(this,arguments);
+};
 })();
 </script>
 <!-- ===== PARCHE v4: CATALOGO COMPLETO DE BANDERAS (paises) dentro de este mismo HTML, sin descargas. Ver el catalogo: abrir con ?catalogo o pulsar Shift+C ===== -->
@@ -3111,7 +3224,7 @@ arreglaTop3();
 <script>
 (function(){
 const box=document.createElement('div');box.id='shout';box.setAttribute('aria-live','polite');(document.getElementById('app')||document.body).appendChild(box);
-const nm=i=>{try{const n=T[i].n;return n[0].toUpperCase()+n.slice(1).toLowerCase()}catch(e){return'tu club'}};
+const nm=i=>{try{const n=T[i].n;return n[0].toUpperCase()+n.slice(1).toLowerCase()}catch(e){return'tu equipo'}};
 const mostrar=h=>{while(box.children.length>=2)box.firstChild.remove();const d=document.createElement('div');d.className='it';d.innerHTML=h;box.appendChild(d);setTimeout(()=>d.remove(),4100)};
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const visto=new Map(),pts=new Map(),COOL=45000; /* un reconocimiento por persona cada 45 s */
@@ -3131,7 +3244,11 @@ handleLiveEntry=function(e){const r=_h.apply(this,arguments);
  return r};
 /* Hincha destacado: cada ~60 s Don Tortu nombra al usuario real con mas puntos de la ronda (sin pedir nada) */
 setInterval(()=>{try{if(over||document.hidden)return;let best=null;pts.forEach((v,k)=>{if(!/^tortubot/i.test(k)&&(!best||v>best[1]))best=[k,v]});
- if(!best)return;const t='¡Hincha destacado: '+best[0]+'! Gracias por alentar.';mostrar('⭐ <b>Hincha destacado</b> · @'+esc(best[0]));say(t)}catch(x){}},60000);
+ if(!best)return;
+ let ti=-1;try{const k=String(best[0]).toLowerCase();ti=picks.has(k)?picks.get(k):recentChatTeam(k)}catch(x){}
+ const eq=ti>=0&&T[ti]?nm(ti):''; /* su equipo o pais (T[ti].n: club o seleccion segun el torneo) */
+ const t='¡Hincha destacado: '+best[0]+'!'+(eq?' Hinchada de '+eq+'.':'')+' Gracias por alentar.';
+ mostrar('⭐ <b>Hincha destacado</b> · @'+esc(best[0])+(eq?' · '+esc(eq):''));say(t)}catch(x){}},60000);
 })();
 </script>
 
@@ -3204,7 +3321,7 @@ const nom=id=>{try{const n=tournamentItem(id).n;return n[0]+n.slice(1).toLowerCa
 const ban=id=>{try{return`<svg viewBox="0 0 40 40" aria-hidden="true">${flag(id,0,0,40,40)}</svg>`}catch(e){return'<svg viewBox="0 0 40 40"></svg>'}};
 let ult='';
 function pinta(){try{
- let cp={};try{cp=JSON.parse(localStorage.getItem('cluss.v1')||'{}').cp||{}}catch(e){}const act=T.map(x=>x.id);
+ let cp={};try{cp=SRV.get('cluss.v1',{}).cp||{}}catch(e){}const act=T.map(x=>x.id);
  /* el podio: los 3 clubes con mas copas; el duelo en curso desempata y siempre aparece si hay lugar */
  let bra=[];try{bra=(BR.r[0]||[]).filter(Boolean)}catch(e){}
  const con=Object.keys(cp).filter(k=>(cp[k]||0)>0),ord=id=>{const q=bra.indexOf(id);return q<0?99:q};
@@ -3295,6 +3412,16 @@ const _r=reset;reset=function(){C={ro:0,pi:0,ot:0};st.querySelectorAll('.n').for
 #connection:after{content:" ▴";opacity:.8}
 #topbar.cerrado #connection:after{content:" ▾"}
 #topbar.cerrado{gap:0}
+/* DOBLE FILA: al desplegar, los botones se reparten en 2 filas de 7 (antes se apretaban en una sola de ~18 px cada uno) */
+#topbar:not(.cerrado) .foot{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px!important;align-items:stretch}
+#topbar:not(.cerrado) .foot>.live{max-width:none!important;width:auto;min-height:36px;justify-content:center;white-space:nowrap}
+#topbar:not(.cerrado) .foot>.sm,#topbar:not(.cerrado) .foot #bCta,#topbar:not(.cerrado) .foot #bLang,#topbar:not(.cerrado) .foot #bVozB{width:auto!important;max-width:none!important;min-width:0!important;height:36px!important;padding:0 2px!important;font-size:17px}
+#topbar:not(.cerrado) .foot #bCta,#topbar:not(.cerrado) .foot #bLang,#topbar:not(.cerrado) .foot #bVozB{font-size:12px}
+#nivelBadge{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:2px 8px;border-radius:8px;border:2px solid #ffe14d;background:linear-gradient(#3a2412,#1b0f06);color:#ffe14d;font:900 12px/1 Inter,sans-serif;letter-spacing:.3px;white-space:nowrap;text-shadow:0 1px 2px #000}
+#topbar.cerrado .foot>#nivelBadge{display:inline-flex!important}
+#nivelBadge.up{animation:nvUp .9s ease-out}
+@keyframes nvUp{0%{transform:scale(1)}30%{transform:scale(1.5);box-shadow:0 0 14px 4px #ffe14d}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){#nivelBadge.up{animation:none}}
 </style>
 <script>
 (function(){
@@ -3317,14 +3444,22 @@ poner(true);
 .cnTop{position:absolute;left:3px;right:3px;bottom:3px;z-index:5;pointer-events:none;padding:3px 4px;border:2px solid #ffe14d;border-radius:8px;background:rgba(10,6,2,.85);color:#fff;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:900 14px/1.1 Inter,sans-serif;text-shadow:0 1px 2px #000;letter-spacing:.2px}
 .banRos{flex:none;display:flex;align-items:center;justify-content:center;gap:4px;margin-top:4px}
 .banRos svg.fgb{display:block!important;flex:none;width:38px;height:27px;border:2px solid #fff;border-radius:4px;box-shadow:0 2px 4px rgba(0,0,0,.6)}
-.ctaBox{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;min-width:0;flex:0 1 auto}
-.rosaCta{flex:none;position:relative;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border-radius:999px;border:1px solid #ffe14d;background:linear-gradient(var(--c1,#ff5a7a),var(--c2,#b80f3a));color:#fff;text-shadow:0 1px 2px #000;box-shadow:0 1px 0 #5c0816,0 0 5px 1px rgba(255,60,110,.85);animation:rosaPulso 1.1s ease-in-out infinite}
-.rosaCta .r{display:inline-block;font-size:11px;line-height:1;animation:rosaWob .6s ease-in-out infinite alternate}
-.rosaCta:after{content:"";position:absolute;inset:-3px;border-radius:999px;border:2px solid #ffe14d;opacity:0;pointer-events:none;animation:rosaAro 1.4s ease-out infinite}
-@keyframes rosaPulso{0%,100%{transform:scale(1);box-shadow:0 2px 0 #5c0816,0 0 8px 1px rgba(255,60,110,.8)}50%{transform:scale(1.08);box-shadow:0 2px 0 #5c0816,0 0 18px 5px rgba(255,225,77,.95)}}
+.ctaBox{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;min-width:0;flex:0 1 auto}
+.rosaCta{flex:none;position:relative;display:inline-flex;align-items:center;gap:3px;padding:3px 5px 3px 4px;border-radius:999px;border:1.5px solid #ffe14d;background:linear-gradient(var(--c1,#ff5a7a),var(--c2,#b80f3a));color:#fff;line-height:1;box-shadow:0 1px 0 #5c0816,0 0 6px 1px rgba(255,60,110,.85);animation:rosaPulso 1.1s ease-in-out infinite}
+.rosaCta .r{display:inline-block;font-size:17px;line-height:1;animation:rosaWob .6s ease-in-out infinite alternate}
+.rosaCta .ar{font:900 11px/1 Inter,sans-serif;color:#fff;text-shadow:0 1px 1px #000} /* flecha: el regalo apoya a la bandera de al lado */
+.rosaCta svg.mf{display:block;flex:none;width:21px;height:14px;border:1px solid #fff;border-radius:2px;box-shadow:0 1px 2px rgba(0,0,0,.6)}
+.rosaCta:after{content:"";position:absolute;inset:-2px;border-radius:999px;border:1.5px solid #ffe14d;opacity:0;pointer-events:none;animation:rosaAro 1.4s ease-out infinite}
+@keyframes rosaPulso{0%,100%{transform:scale(1);box-shadow:0 1px 0 #5c0816,0 0 5px 1px rgba(255,60,110,.8)}50%{transform:scale(1.08);box-shadow:0 1px 0 #5c0816,0 0 12px 3px rgba(255,225,77,.95)}}
 @keyframes rosaWob{from{transform:rotate(-14deg) scale(1)}to{transform:rotate(14deg) scale(1.18)}}
 @keyframes rosaAro{0%{opacity:.95;transform:scale(1)}100%{opacity:0;transform:scale(1.18,1.6)}}
-@media (prefers-reduced-motion:reduce){.rosaCta,.rosaCta .r,.rosaCta:after{animation:none}}
+/* MODO DISCRETO (por defecto): ya NO es apagado. Color del regalo, brillo dorado suave y latido lento (sin aro ni pulso fuerte). El modo LLAMATIVO anade el aro y el pulso rapido. */
+html.ctaTeamCalm .rosaCta{border:1.5px solid rgba(255,225,77,.9);box-shadow:0 1px 0 #5c0816,0 0 8px 1px rgba(255,200,80,.55);animation:rosaLatido 2.2s ease-in-out infinite}
+html.ctaTeamCalm .rosaCta:after{display:none}
+html.ctaTeamCalm .rosaCta .r{animation:rosaWobSuave 1.8s ease-in-out infinite alternate}
+@keyframes rosaLatido{0%,100%{transform:scale(1);box-shadow:0 1px 0 #5c0816,0 0 6px 1px rgba(255,200,80,.45)}50%{transform:scale(1.07);box-shadow:0 1px 0 #5c0816,0 0 13px 3px rgba(255,225,77,.85)}}
+@keyframes rosaWobSuave{from{transform:rotate(-8deg)}to{transform:rotate(8deg)}}
+@media (prefers-reduced-motion:reduce){.rosaCta,.rosaCta .r,.rosaCta:after{animation:none!important}}
 </style>
 <script>
 (function(){
@@ -3376,7 +3511,7 @@ setInterval(ajusta,500);ajusta();
 #copas .ct small{font-size:10px}
 .banRos svg.fgb{width:44px;height:31px}
 </style>
-<!-- ===== MENU INTERNO DE CTA (v2): en la barra de herramientas hay un boton 🎁 que abre un menu a pantalla completa. Ahi se (1) habilita o no el CTA principal de arriba (la franja Rosa / Pistola / Otros) y (2) elige, para el equipo A (carril izquierdo) y el equipo B (derecho), cuales de los 8 regalos se muestran debajo del nombre (se pueden mezclar o dejar ninguno). Son carteles visuales: no suman puntos, solo cuentan los regalos reales. La lista GIFTS se puede editar. Se guarda en localStorage (cluss.cta). Cerrar el menu antes de mostrar pantalla. Para quitar: borrar este bloque. ===== -->
+<!-- ===== MENU INTERNO DE CTA (v2): en la barra de herramientas hay un boton 🎁 que abre un menu a pantalla completa. Ahi se (1) habilita o no el CTA principal de arriba (la franja Rosa / Pistola / Otros) y (2) elige, para el equipo A (carril izquierdo) y el equipo B (derecho), cuales de los 3 regalos (rosita, dona, confeti) se muestran debajo del nombre, y (3) un interruptor MODO DISCRETO para los CTA de equipos (sin brillo ni pulso, solo se mueven; cada uno muestra regalo ➜ bandera del equipo) (se pueden mezclar o dejar ninguno). Son carteles visuales: no suman puntos, solo cuentan los regalos reales. La lista GIFTS se puede editar. No se guarda en ningun lado: arranca siempre apagado (el modo discreto cluss.ctaCalm si va al servidor). Cerrar el menu antes de mostrar pantalla. Para quitar: borrar este bloque. ===== -->
 <style id="cta-menu">
 html.ctaTopOff #regalos{display:none!important}
 #topbar .foot #bCta{flex:0 0 auto;max-width:none;width:auto;padding:0 9px;font:900 12px/1 Inter,sans-serif;letter-spacing:.4px;color:#1a1000;border:2px solid #fff;background:linear-gradient(#ffe14d,#e0a800)}
@@ -3391,7 +3526,7 @@ html.ctaTopOff #regalos{display:none!important}
 #panCta .sec p{margin:6px 0 0;font:600 11px/1.3 Inter,sans-serif;color:#c9b48f}
 #panCta .sw{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border-radius:12px;border:3px solid #fff;color:#fff;font:900 16px/1 Inter,sans-serif;letter-spacing:.5px;text-shadow:0 1px 2px #000;cursor:pointer;background:linear-gradient(#35d27a,#0c7a3a)}
 #panCta .sw.off{background:linear-gradient(#777,#3c3c3c);border-color:#aaa;color:#ddd}
-#panCta .gr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+#panCta .gr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 #panCta .gb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 2px;border-radius:10px;border:2px solid #6f4a28;background:#3a2412;color:#fff;cursor:pointer;opacity:.55;touch-action:manipulation}
 #panCta .gb .i{font-size:26px;line-height:1}
 #panCta .gb .n{font:800 10px/1 Inter,sans-serif;letter-spacing:.2px}
@@ -3401,9 +3536,9 @@ html.ctaTopOff #regalos{display:none!important}
 <script>
 (function(){
 const tb=document.getElementById('topbar'),foot=tb&&tb.querySelector('.foot');if(!tb||!foot)return;
-/* Regalos disponibles en los CTA de equipo. */
+/* 3 regalos para los CTA de equipos: k = id, ic = icono, n = nombre (solo menu y accesibilidad; en pantalla va solo el icono), a/b = colores. Editar aca para cambiar los regalos. */
 const GIFTS=[
- {k:'rosa',ic:'🌹',n:'ROSA',a:'#ff5a7a',b:'#b80f3a'},
+ {k:'rosa',ic:'🌹',n:'ROSITA',a:'#ff5a7a',b:'#b80f3a'},
  {k:'dona',ic:'🍩',n:'DONA',a:'#ffa65a',b:'#b8500f'},
  {k:'confeti',ic:'🎉',n:'CONFETI',a:'#5aa8ff',b:'#1c4fb8'}];
 const KEYS=GIFTS.map(g=>g.k),LSK='cluss.cta';
@@ -3411,7 +3546,10 @@ let st={top:false,A:[],B:[]}; /* CTA SIEMPRE ARRANCA APAGADO: no se lee lo guard
 try{const v=null;if(v&&typeof v==='object'){
  if(typeof v.top==='boolean')st.top=v.top;
  ['A','B'].forEach(t=>{if(Array.isArray(v[t]))st[t]=v[t].filter(k=>KEYS.includes(k))})}}catch(e){}
-const guardar=()=>{try{localStorage.setItem(LSK,JSON.stringify(st))}catch(e){}};
+const guardar=()=>{}; /* NO se persiste: los CTA siempre arrancan apagados (nunca se leia lo guardado), asi que no se manda nada al servidor */
+/* MODO DISCRETO de los CTA de equipos: por defecto ACTIVADO (se guarda en cluss.ctaCalm). Activado = no brillan ni pulsan, solo se mueven suave. */
+let calm=true;try{if(SRV.get('cluss.ctaCalm','1')==='0')calm=false}catch(e){}
+const guardaCalm=()=>{try{SRV.set('cluss.ctaCalm',calm?'1':'0')}catch(e){}}; /* BACKEND: PUT /api/state/cluss.ctaCalm */
 const refit=()=>setTimeout(()=>window.dispatchEvent(new Event('resize')),60);
 const nm=i=>{try{return String(T[i].n||'').toUpperCase()}catch(e){return i?'EQUIPO B':'EQUIPO A'}};
 /* menu */
@@ -3419,6 +3557,7 @@ const pan=document.createElement('section');pan.id='panCta';pan.hidden=true;pan.
 const grid=t=>'<div class="gr" data-t="'+t+'">'+GIFTS.map(g=>'<button type="button" class="gb" data-k="'+g.k+'" aria-label="'+g.n+'"><span class="i">'+g.ic+'</span><span class="n">'+g.n+'</span></button>').join('')+'</div>';
 pan.innerHTML='<div class="top"><h2>🎁 CTA</h2><button type="button" class="x" id="ctaX">✕ Cerrar</button></div>'
  +'<div class="sec"><h3>CTA principal <small>· franja de arriba (Rosa / Pistola / Otros)</small></h3><button type="button" class="sw" id="ctaTop"></button></div>'
+ +'<div class="sec"><h3>CTA de los equipos <small>· regalo ➜ bandera del equipo</small></h3><button type="button" class="sw" id="ctaCalm"></button><p>Modo discreto: los CTA de cada equipo son más grandes y llaman un poco la atención (brillo dorado suave y latido lento, sin aro ni pulso fuerte) (sin texto: regalo, flecha y bandera del equipo al que apoya). El CTA principal se maneja aparte, arriba.</p></div>'
  +'<div class="sec"><h3>Equipo A <small id="ctaNA"></small></h3>'+grid('A')+'<p>Tocá un regalo para mostrarlo u ocultarlo debajo del nombre del equipo.</p></div>'
  +'<div class="sec"><h3>Equipo B <small id="ctaNB"></small></h3>'+grid('B')+'</div>';
 document.body.appendChild(pan);
@@ -3434,18 +3573,22 @@ function carrera(){try{const sg=T[0].n+'|'+T[1].n,w=!!document.querySelector('#w
 function pinta(){
  carrera();
  document.documentElement.classList.toggle('ctaTopOff',!st.top);
+ document.documentElement.classList.toggle('ctaTeamCalm',calm);
+ {const cw=pan.querySelector('#ctaCalm');cw.textContent=calm?'🔒 DISCRETO · brillo suave':'🔓 LLAMATIVO · brilla y pulsa';cw.classList.toggle('off',!calm);cw.setAttribute('aria-pressed',String(calm))}
  const sw=pan.querySelector('#ctaTop');sw.textContent=st.top?'✔ ACTIVADO':'✖ DESACTIVADO';sw.classList.toggle('off',!st.top);sw.setAttribute('aria-pressed',String(st.top));
  pan.querySelector('#ctaNA').textContent='· '+nm(0);pan.querySelector('#ctaNB').textContent='· '+nm(1);
  ['A','B'].forEach(t=>pan.querySelectorAll('.gr[data-t="'+t+'"] .gb').forEach(b=>{const on=st[t].includes(b.dataset.k);b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on))}));
  let cambio=false;
  [0,1].forEach(i=>{const box=document.querySelector('#ln'+i+' .ctaBox');if(!box)return;
-  const list=st[i?'B':'A'],sig=list.join(',');if(box.dataset.sig===sig)return;box.dataset.sig=sig;cambio=true;
-  box.innerHTML=list.map(k=>{const g=GIFTS[KEYS.indexOf(k)];return`<span class="rosaCta" role="img" aria-label="${g.n}" title="${g.n}" style="--c1:${g.a};--c2:${g.b}"><span class="r">${g.ic}</span></span>`}).join('')});
+  const list=st[i?'B':'A'],sig=list.join(',')+'|'+(T[i]&&T[i].id);if(box.dataset.sig===sig)return;box.dataset.sig=sig;cambio=true;
+   let fl='';try{fl='<svg class="mf" viewBox="0 0 20 14" aria-hidden="true">'+flag(T[i].id,0,0,20,14)+'</svg>'}catch(e){}
+   box.innerHTML=list.map(k=>{const g=GIFTS[KEYS.indexOf(k)];return`<span class="rosaCta" role="img" aria-label="${g.n} ➜ ${nm(i)}" style="--c1:${g.a};--c2:${g.b}"><span class="r">${g.ic}</span><span class="ar" aria-hidden="true">➜</span>${fl}</span>`}).join('')});
  if(cambio)refit()}
 const abrir=()=>{pan.hidden=false;pinta()},cerrar=()=>{pan.hidden=true};
 bt.onclick=abrir;pan.querySelector('#ctaX').onclick=cerrar;
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!pan.hidden)cerrar()});
 pan.querySelector('#ctaTop').onclick=()=>{st.top=!st.top;guardar();pinta();refit()};
+pan.querySelector('#ctaCalm').onclick=()=>{calm=!calm;guardaCalm();pinta()};
 pan.addEventListener('click',e=>{const b=e.target.closest('.gb');if(!b)return;
  const t=b.parentElement.dataset.t,k=b.dataset.k,l=st[t],i=l.indexOf(k);if(i>=0)l.splice(i,1);else l.push(k);
  st[t]=KEYS.filter(x=>st[t].includes(x));guardar();pinta()});
@@ -3453,23 +3596,21 @@ pinta();setInterval(pinta,500);
 })();
 </script>
 
-<!-- ===== DIVISION DE EQUIPOS POR DISENO DE BASE (v2, madera): cada carril es un panel de madera propio, separados por una viga de madera con cartel VS. El color del club solo aparece como filo fino (viga y borde del nombre), leido de T[i].c cada 500 ms. Si algo se rompe, borrar este bloque. ===== -->
+<!-- ===== DIVISION DE EQUIPOS POR DISENO DE BASE (v2, madera): cada carril es un panel de madera propio, separados por una viga de madera con cartel VS DIBUJADOS EN EL FONDO DEL TABLERO (v3, ya no flotan). El color del club solo aparece como filo fino (viga y borde del nombre), leido de T[i].c cada 500 ms. Si algo se rompe, borrar este bloque. ===== -->
 <style id="division-equipos">
-#lanes{position:relative;gap:14px!important;--tcA:#f1f1f1;--tcB:#3b82f6}
+/* v3: la viga central y el cartel VS ya NO flotan encima: se DIBUJAN en el fondo del tablero (#lanes), por debajo de los carriles, en el hueco de 22px entre ambos. Nada se superpone a las tortugas ni a los avisos. */
+#lanes{gap:22px!important;--tcA:#f1f1f1;--tcB:#3b82f6;
+ background:
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23faf3e2'/%3E%3Cstop offset='1' stop-color='%23e2d6bb'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='11' cy='11' r='10' fill='url(%23g)' stroke='%236b6f78' stroke-width='1.6'/%3E%3Ctext x='11' y='14.5' text-anchor='middle' font-family='Inter,Arial,sans-serif' font-weight='900' font-size='9.5' fill='%232a2018'%3EVS%3C/text%3E%3C/svg%3E") 50% 44%/22px 22px no-repeat,
+  repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 1px,transparent 1px 7px) 50% 0/8px 100% no-repeat,
+  linear-gradient(90deg,#3f2713,#8a5a30 50%,#3f2713) 50% 0/8px 100% no-repeat,
+  linear-gradient(var(--tcA),var(--tcA)) calc(50% - 5px) 0/2px 100% no-repeat,
+  linear-gradient(var(--tcB),var(--tcB)) calc(50% + 5px) 0/2px 100% no-repeat}
 .lane{--tc:#888;padding:3px;border-radius:11px;border:2px solid #3f2713;
  background:linear-gradient(#a8743f,#6e4524);
  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -2px 4px rgba(0,0,0,.4),0 3px 5px rgba(0,0,0,.5)}
 .lane .sv{border-radius:9px;overflow:hidden;box-shadow:inset 0 0 0 1px #3f2713}
 .lane .cnTop{border-color:var(--tc)!important}
-/* viga de madera central con filo del color de cada club */
-#lanes:after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:10px;margin-left:-5px;z-index:4;pointer-events:none;border-radius:4px;
- background:repeating-linear-gradient(0deg,rgba(0,0,0,.12) 0 1px,transparent 1px 7px),linear-gradient(90deg,#3f2713,#8a5a30 50%,#3f2713);
- border:1px solid #2a190b;
- box-shadow:-3px 0 0 var(--tcA),3px 0 0 var(--tcB),0 0 6px rgba(0,0,0,.6)}
-/* cartel VS, mismo estilo que las placas crema de la interfaz */
-#lanes:before{content:"VS";position:absolute;left:50%;top:44%;width:30px;height:30px;margin:-15px 0 0 -15px;z-index:4;pointer-events:none;
- display:flex;align-items:center;justify-content:center;border-radius:50%;border:2px solid #6b6f78;
- background:linear-gradient(#faf3e2,#e2d6bb);color:#2a2018;font:900 12px/1 Inter,sans-serif;box-shadow:0 2px 5px rgba(0,0,0,.6)}
 </style>
 <script>
 (function(){
@@ -3536,7 +3677,7 @@ const SENT=[
 [/Ganó (.+?)! Gracias por jugar y alentar\. En unos segundos arranca otra ronda, ¡te esperamos!/g,"$1 wins! Thanks for playing and cheering. Another round starts in a few seconds, we'll be waiting for you!"],
 [/Tenemos campeón: (.+?)! Gracias por estar\. Ya viene una nueva carrera\./g,'We have a champion: $1! Thanks for being here. A new race is coming.'],
 [/Tenemos campeón del torneo! (.+?) se lleva las tres copas\. ¡Felicitaciones y gracias por jugar!/g,'We have the tournament champion! $1 takes all three cups. Congratulations and thanks for playing!'],
-[/Bienvenidos al duelo (.+?) contra (.+?)\. Aquí cada hincha cuenta: escribe el nombre de tu club y aparece tu nombre en pantalla\. ¡Gana el primero que llegue a la meta!/g,"Welcome to the duel $1 versus $2. Here every fan counts: type your club's name and your name shows up on screen. First to reach the finish line wins!"],
+[/Bienvenidos al duelo (.+?) contra (.+?)\. Aquí cada hincha cuenta: escribe el nombre de tu equipo para apoyar a tu equipo\. ¡Gana el primero que llegue a la meta!/g,"Welcome to the duel $1 versus $2. Here every fan counts: type your team's name to support your team. First to reach the finish line wins!"],
 [/Recta final! Todo se decide ahora\. ¡Vamos, tortugas!/g,'Final stretch! Everything is decided now. Go, turtles!'],
 [/Llegando a la meta! ¡Qué emoción, esto está parejísimo!/g,'Approaching the finish line! How exciting, it is neck and neck!'],
 [/El ganador de este duelo pasa a (.+?)\. El que pierde queda eliminado\./g,(m,r)=>'The winner of this duel moves on to '+({'el campeón del torneo':'the tournament champion','la final':'the final','las semifinales':'the semifinals','la siguiente ronda':'the next round'}[r]||r)+'. The loser is eliminated.'],
@@ -3557,10 +3698,11 @@ const SENT=[
 [/Turbo cada (\d+) taps/g,'Turbo every $1 taps'],
 [/Subiste al nivel (\d+)/g,'You reached level $1'],
 [/Contador tap tap de (.+?); solo eventos reales suman taps; cada 500 activa el turbo/g,'Tap-tap counter of $1; only real events add taps; every 500 triggers turbo'],
+[/Subiste a nivel (\d+)/g,'You reached level $1'],
 [/RONDA (\d+)/g,'ROUND $1']
 ];
 /* ---- 4) Fragmentos sueltos (de mas largo a mas corto) ---- */
-const FRAG_SRC={'OCTAVOS DE FINAL':'ROUND OF 16','CUARTOS DE FINAL':'QUARTERFINALS','SEMIFINALES':'SEMIFINALS','CAMPEÓN':'CHAMPION','Campeón':'Champion','AVANZA!':'ADVANCES!','GANA LA CARRERA':'WINS THE RACE','toma la delantera':'takes the lead','¡RECTA FINAL!':'FINAL STRETCH!','Recta final':'Final stretch','RECTA FINAL':'FINAL STRETCH','¡Todo se decide en la recta!':'Everything is decided on the straight!','¡Vamos, tortugas!':'Go, turtles!','¡Qué carrera, gente!':'What a race, people!','Tu equipo: ':'Your team: ','¡Gracias por el regalo!':'Thanks for the gift!','Copas reiniciadas: todo empieza de cero':'Cups reset: everything starts from zero','Toca ↺ otra vez para reiniciar las copas':'Tap ↺ again to reset the cups','¿Seguro? Toca de nuevo':'Sure? Tap again','Torneo automático (rota solo al terminar cada copa)':'Automatic tournament (rotates when each cup ends)','Torneo automático':'Automatic tournament','Torneo fijo: ':'Fixed tournament: ','Torneo: ':'Tournament: ','es el campeón del torneo':'is the tournament champion','🏆 ¡GANÓ EL TORNEO!':'🏆 WON THE TOURNAMENT!','➡️ Pasa a ':'➡️ Advances to ','NUEVO TORNEO':'NEW TOURNAMENT','SIGUIENTE PARTIDO':'NEXT MATCH',' · un solo partido':' · single match','¡Hincha acertado! Ganó tu equipo':'Spot-on fan! Your team won','¡Tu equipo ganó! +50 XP':'Your team won! +50 XP','¡Hincha destacado: ':'Featured fan: ',' es el nuevo MVP':' is the new MVP',' lidera la sala':' leads the room',' se pasó a ':' switched to ','Carrera pareja: 5 cambios de líder':'Close race: 5 lead changes','¡MÁXIMO!':'MAX!','¡Combo máximo x3!':'Max combo x3!','activa el TURBO 🚀':'activates TURBO 🚀','avanza y activa el TURBO 🚀':'advances and activates TURBO 🚀','comparte y suma +5':'shares and adds +5','gana al instante 🏆':'wins instantly 🏆','sigue y suma +3':'follows and adds +3','¡toca el live! ❤️':'tap the live! ❤️','¡comparte el live! ↗️':'share the live! ↗️','¡sigue la cuenta! ➕':'follow the account! ➕','APOYAR: cada toque en el live suma 1 tap':'SUPPORT: each tap on the live adds 1 tap','COMPARTIR: compartir el live suma 5 taps':'SHARE: sharing the live adds 5 taps','SEGUIR: seguir la cuenta suma 3 taps':'FOLLOW: following the account adds 3 taps','ROSITA: activa el modo turbo':'ROSE: activates turbo mode','PISTOLA DE DINERO: gana la carrera':'MONEY GUN: wins the race','por tu regalo':'for your gift','por tus ':'for your ',' compartió · sumó taps para ':' shared · added taps for ',' · ¡TURBO! +':' · TURBO! +',' · ¡nuevo hincha de ':' · new fan of ',' · +10% y turbo para ':' · +10% and turbo for ',' · tocar para cambiar':' · tap to switch',' · ¡gracias!':' · thanks!','¡Gracias ':'Thanks ','! Hinchada de ':'! Fans of ',' por traer más hinchas!':' for bringing more fans!',' es hincha de ':' is a fan of ','¡Bienvenido a la familia, ':'Welcome to the family, ','Saludamos al hincha de ':'We greet the fan of ',' dice: ':' says: ','alguien':'someone',': en vivo':': live',': sin conexión':': offline',': conectando':': connecting','Inicio de carrera':'Race start','Cada hincha que escribe su club hace avanzar a su tortuga.':'Every fan who types their club moves their turtle forward.','Aquí se reconoce a cada hincha por su nombre.':'Every fan is recognized here by name.','Así se juega: tu club en el chat.':'How to play: type your club in the chat.','El ganador pasa a ':'The winner moves on to ','la siguiente ronda':'the next round','las semifinales':'the semifinals','la final':'the final','Límite de taps del turbo y versión':'Turbo tap limit and version','⚡ Límite ':'⚡ Limit ','Contador de ':'Counter of ','Hinchas de ':'Fans of ','Bandera de ':'Flag of ','Cuadro de ':'Bracket of ','Fixture del torneo: cuartos de final, semifinales y final':'Tournament fixture: quarterfinals, semifinals and final','Ruta ':'Track ',' con relieve':' with relief','MVP: ':'MVP: ','⏳ En curso':'⏳ In progress'};
+const FRAG_SRC={'OCTAVOS DE FINAL':'ROUND OF 16','CUARTOS DE FINAL':'QUARTERFINALS','SEMIFINALES':'SEMIFINALS','CAMPEÓN':'CHAMPION','Campeón':'Champion','AVANZA!':'ADVANCES!','GANA LA CARRERA':'WINS THE RACE','toma la delantera':'takes the lead','¡RECTA FINAL!':'FINAL STRETCH!','Recta final':'Final stretch','RECTA FINAL':'FINAL STRETCH','¡Todo se decide en la recta!':'Everything is decided on the straight!','¡Vamos, tortugas!':'Go, turtles!','¡Qué carrera, gente!':'What a race, people!','Tu equipo: ':'Your team: ','¡Gracias por el regalo!':'Thanks for the gift!','Copas reiniciadas: todo empieza de cero':'Cups reset: everything starts from zero','Toca ↺ otra vez para reiniciar las copas':'Tap ↺ again to reset the cups','¿Seguro? Toca de nuevo':'Sure? Tap again','Torneo automático (rota solo al terminar cada copa)':'Automatic tournament (rotates when each cup ends)','Torneo automático':'Automatic tournament','Torneo fijo: ':'Fixed tournament: ','Torneo: ':'Tournament: ','es el campeón del torneo':'is the tournament champion','🏆 ¡GANÓ EL TORNEO!':'🏆 WON THE TOURNAMENT!','➡️ Pasa a ':'➡️ Advances to ','NUEVO TORNEO':'NEW TOURNAMENT','SIGUIENTE PARTIDO':'NEXT MATCH',' · un solo partido':' · single match','¡Hincha acertado! Ganó tu equipo':'Spot-on fan! Your team won','¡Tu equipo ganó! +50 XP':'Your team won! +50 XP','¡Hincha destacado: ':'Featured fan: ',' es el nuevo MVP':' is the new MVP',' lidera la sala':' leads the room',' se pasó a ':' switched to ','Carrera pareja: 5 cambios de líder':'Close race: 5 lead changes','¡MÁXIMO!':'MAX!','¡Combo máximo x3!':'Max combo x3!','activa el TURBO 🚀':'activates TURBO 🚀','avanza y activa el TURBO 🚀':'advances and activates TURBO 🚀','comparte y suma +5':'shares and adds +5','gana al instante 🏆':'wins instantly 🏆','sigue y suma +3':'follows and adds +3','¡toca el live! ❤️':'tap the live! ❤️','¡comparte el live! ↗️':'share the live! ↗️','¡sigue la cuenta! ➕':'follow the account! ➕','APOYAR: cada toque en el live suma 1 tap':'SUPPORT: each tap on the live adds 1 tap','COMPARTIR: compartir el live suma 5 taps':'SHARE: sharing the live adds 5 taps','SEGUIR: seguir la cuenta suma 3 taps':'FOLLOW: following the account adds 3 taps','ROSITA: activa el modo turbo':'ROSE: activates turbo mode','PISTOLA DE DINERO: gana la carrera':'MONEY GUN: wins the race','por tu regalo':'for your gift','por tus ':'for your ',' compartió · sumó taps para ':' shared · added taps for ',' · ¡TURBO! +':' · TURBO! +',' · ¡nuevo hincha de ':' · new fan of ',' · +10% y turbo para ':' · +10% and turbo for ',' · tocar para cambiar':' · tap to switch',' · ¡gracias!':' · thanks!','¡Gracias ':'Thanks ','! Hinchada de ':'! Fans of ',' por traer más hinchas!':' for bringing more fans!',' es hincha de ':' is a fan of ','¡Bienvenido a la familia, ':'Welcome to the family, ','Saludamos al hincha de ':'We greet the fan of ',' dice: ':' says: ','alguien':'someone',': en vivo':': live',': sin conexión':': offline',': conectando':': connecting','Inicio de carrera':'Race start','Cada hincha que escribe su equipo hace avanzar a su tortuga.':'Every fan who types their team moves their turtle forward.','Escribe el nombre de tu equipo en el chat para apoyarlo.':"Type your team's name in the chat to support it.",'Así se juega: tu equipo en el chat.':'How to play: type your team in the chat.','El ganador pasa a ':'The winner moves on to ','la siguiente ronda':'the next round','las semifinales':'the semifinals','la final':'the final','Límite de taps del turbo y versión':'Turbo tap limit and version','⚡ Límite ':'⚡ Limit ','Contador de ':'Counter of ','Hinchas de ':'Fans of ','Bandera de ':'Flag of ','Cuadro de ':'Bracket of ','Fixture del torneo: cuartos de final, semifinales y final':'Tournament fixture: quarterfinals, semifinals and final','Ruta ':'Track ',' con relieve':' with relief','MVP: ':'MVP: ','⏳ En curso':'⏳ In progress'};
 const FRAG=Object.keys(FRAG_SRC).sort((a,b)=>b.length-a.length).map(k=>[k,FRAG_SRC[k]]);
 const cache=new Map();
 function tr(x){
@@ -3621,11 +3763,11 @@ function set(en){
 }
 I.set=set;
 /* Idioma de arranque POR TORNEO: lo elige el usuario en el panel del boton de idioma (se guarda). Por defecto solo Libertadores arranca en espanol. */
-const LABELS=[['libertadores','LIBERTADORES'],['champions','CHAMPIONS'],['countries','COPA DEL MUNDO / WORLD CUP'],['america','COPA AMÉRICA'],['elite','ELITE NATIONS CUP']];
-const LSL='cluss.lang',DEFL={libertadores:'es',champions:'en',countries:'en',america:'en',elite:'en'};
+const LABELS=[['libre','TORNEO LIBRE'],['libertadores','LIBERTADORES'],['champions','CHAMPIONS'],['countries','COPA DEL MUNDO / WORLD CUP'],['america','COPA AMÉRICA'],['elite','ELITE NATIONS CUP']];
+const LSL='cluss.lang',DEFL={libre:'es',libertadores:'es',champions:'en',countries:'en',america:'en',elite:'en'};
 const pref=Object.assign({},DEFL);
-try{const v=JSON.parse(localStorage.getItem(LSL)||'null');if(v&&typeof v==='object')for(const k in DEFL)if(v[k]==='es'||v[k]==='en')pref[k]=v[k]}catch(e){}
-const savePref=()=>{try{localStorage.setItem(LSL,JSON.stringify(pref))}catch(e){}};
+try{const v=SRV.get(LSL,null);if(v&&typeof v==='object')for(const k in DEFL)if(v[k]==='es'||v[k]==='en')pref[k]=v[k]}catch(e){}
+const savePref=()=>{try{SRV.set(LSL,pref)}catch(e){}}; /* BACKEND: PUT /api/state/cluss.lang */
 const DEF=m=>(pref[m]||'en')==='en';
 let last=null;
 const pan=document.createElement('section');pan.id='panLang';pan.hidden=true;pan.setAttribute('data-noi18n','');pan.setAttribute('role','dialog');pan.setAttribute('aria-label','Idioma / Language');
@@ -3650,15 +3792,16 @@ pan.addEventListener('click',e=>{const t=e.target;
   last=k;set(DEF(k));cerrar()}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!pan.hidden)cerrar()});
 if(btn)btn.addEventListener('click',abrir);
-function mode(){try{return JSON.parse(localStorage.getItem('cluss.v1')||'{}').tournamentMode||'libertadores'}catch(e){return 'libertadores'}}
+function mode(){try{return SRV.get('cluss.v1',{}).tournamentMode||'libre'}catch(e){return 'libre'}}
 function poll(){const m=mode();if(m!==last){last=m;set(DEF(m))}}
 poll();setInterval(poll,500);paint();
 })();
 </script>
 
-<!-- Cuadro con los 10 usuarios reales que más actividad acumulan. -->
-<style id="ranking-css">
-#copas .rw.f1:after{content:none!important;display:none!important}
+<!-- ===== v11: CUENTA REGRESIVA 60 s + COPAS (solo 3, chico) + CUADRO DE USUARIOS ABAJO. Para quitar: borrar este bloque. ===== -->
+<style id="v11-css">
+/* copas: solo 3 clubes, cuadro chico (no se estira) */
+#copas .rw.f1:after{content:none!important;display:none!important} /* sin corona a la derecha de las copas */
 #copas{flex:0 0 auto!important;margin:auto 0 0!important;padding:5px 3px 4px!important}
 #honor .av{width:34px!important;height:34px!important;font-size:18px!important}#honor .s1 .av{width:40px!important;height:40px!important;font-size:21px!important}#honor .pd{gap:3px!important}#honor .hh{margin-bottom:3px!important}
 #copas .hh{font-size:8px!important;margin-bottom:3px!important}
@@ -3667,27 +3810,32 @@ poll();setInterval(poll,500);paint();
 #copas .nm{order:0!important;flex:1 1 0!important;min-width:0;text-align:left!important;font-size:9px!important;letter-spacing:0!important}
 #copas .ct{font-size:13px!important}#copas .ct small{display:none!important}
 #copas .rw:before{min-width:12px!important;height:12px!important;font-size:8px!important;left:-3px!important;top:-4px!important}
+/* pista: cede su alto al cuadro de usuarios */
 .sv>svg{height:calc(496px + var(--ex) - var(--pnl,0px))!important}
-#rank{order:-2;flex:none;display:grid;grid-template-columns:repeat(var(--rc,5),minmax(0,1fr));gap:2px 2px;padding:3px 4px 2px;background:linear-gradient(#7a4e2a,#5a3a1e);border:2px solid #3f2713;border-radius:10px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
-#rank .u{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0}
-#rank .av{width:24px;height:24px;border-radius:50%;border:2px solid var(--c,#c9ccd1);background:#3f2713;display:flex;align-items:center;justify-content:center;overflow:hidden;font:800 11px Inter,sans-serif;color:#fff}
+/* cuadro de hinchas: DOS cuadros (uno por equipo), 12 hinchas cada uno, avatares grandes. El borde lleva el color del equipo */
+#rank{order:-2;flex:none;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+#rank .rk{display:grid;grid-template-columns:repeat(var(--rc,4),minmax(0,1fr));gap:5px 3px;justify-items:center;align-content:start;padding:5px 4px 5px;background:linear-gradient(#7a4e2a,#5a3a1e);border:2px solid var(--tc,#3f2713);border-radius:10px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
+#rank .u{position:relative;width:min(100%,40px);min-width:0}
+#rank .av{width:100%;aspect-ratio:1/1;border-radius:50%;border:2px solid var(--c,#c9ccd1);background:#3f2713;display:flex;align-items:center;justify-content:center;overflow:hidden;font:800 16px Inter,sans-serif;color:#fff}
 #rank .av img{width:100%;height:100%;object-fit:cover;display:block}
-#rank .n{position:absolute;left:1px;top:-3px;min-width:13px;height:13px;padding:0 2px;border-radius:7px;background:#3f2713;border:1px solid #ffe14d;color:#ffe14d;font:900 8px/11px Inter,sans-serif;text-align:center;z-index:1}
+#rank .n{position:absolute;left:-3px;top:-4px;min-width:13px;height:13px;padding:0 2px;border-radius:7px;background:#3f2713;border:1px solid #ffe14d;color:#ffe14d;font:900 8px/11px Inter,sans-serif;text-align:center;z-index:2}
 #rank .u.f1 .av{border-color:#ffe14d;box-shadow:0 0 6px 1px rgba(255,225,77,.7)}
-#rank .u.f1:after{content:"👑";position:absolute;right:-1px;top:-8px;font-size:11px;transform:rotate(18deg)}
-#rank .s{margin-top:1px;max-width:100%;overflow:hidden;font:900 10px/1.1 Inter,sans-serif;color:#ffe14d;text-shadow:0 1px 2px #000;white-space:nowrap}
-#rank .u.e{opacity:.3}
-#evs .st[data-k="idle"].low span{color:#ff6b6b;animation:idle-pulse .5s ease-in-out infinite alternate}
-@keyframes idle-pulse{to{transform:scale(1.25)}}
+#rank .u.f1:after{content:"👑";position:absolute;right:-4px;top:-9px;font-size:12px;transform:rotate(18deg);z-index:2}
+#rank .s{position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);min-width:70%;padding:0 3px;border-radius:7px;background:rgba(27,18,10,.95);border:1px solid #ffe14d;font:900 11px/14px Inter,sans-serif;text-align:center;color:#ffe14d;white-space:nowrap;z-index:3}
+#rank .rk{padding-bottom:11px}
+#rank .u.e{opacity:.3}#rank .u.e .s{display:none}
+/* cuenta regresiva */
+#evs .st[data-k="idle"].low span{color:#ff6b6b;animation:v11p .5s ease-in-out infinite alternate}
+@keyframes v11p{to{transform:scale(1.25)}}
 </style>
 <script>
 (function(){
-const RANK_N=10;
-const rows=RANK_N>5?2:1,cols=Math.ceil(RANK_N/rows);
-const fmt=n=>{n=Math.floor(n||0);if(n<1000)return String(n);
- let v=n/1000,u='K';if(Math.round(v*10)/10>=1000){v=n/1e6;u='M'}else if(n>=1e6){v=n/1e6;u='M'}
- return(v<10?v.toFixed(1).replace(/\.0$/,''):String(Math.round(v)))+u};
-const info=new Map();
+/* ---------- 2) CUADRO DE USUARIOS: top 10 con su puntaje (1.2K, 3.4M) ---------- */
+const PER_TEAM=12,COLS=4; /* 12 hinchas por equipo; COLS=4 -> 3 filas de avatares grandes (6 -> 2 filas mas bajas y avatares mas chicos) */
+const fmt=n=>{n=Math.floor(n||0);if(n<1000)return String(n); /* 999 -> 1k -> 12k -> 1.2m */
+ const f=v=>v<10?v.toFixed(1).replace(/\.0$/,''):String(Math.round(v));
+ return n>=999500?f(n/1e6)+'m':f(n/1e3)+'k'};
+const info=new Map(); /* foto y nombre del ultimo evento real de cada usuario */
 const _h=handleLiveEntry;
 handleLiveEntry=function(e){
  try{if(e&&!e.bot&&e.username){const k=String(e.username).trim().toLowerCase();
@@ -3695,32 +3843,40 @@ handleLiveEntry=function(e){
   const o=info.get(k)||{name:String(e.username).trim(),url:''};if(url)o.url=url;info.set(k,o)}}catch(x){}
  return _h.apply(this,arguments);
 };
-const box=document.createElement('div');box.id='rank';box.setAttribute('aria-label','Top usuarios');
-box.style.setProperty('--rc',cols);
+const box=document.createElement('div');box.id='rank';box.setAttribute('aria-label','Hinchas de cada equipo');
+box.style.setProperty('--rc',COLS);
 const bar=document.getElementById('topbar'),app=document.getElementById('app');
 (bar||app).prepend(box);
-let last=null;
+let last=null; /* null: dibuja los 12 huecos de cada equipo aunque aun no haya usuarios */
+const teamOfUser=(k,known)=>{const kn=known&&known.get(k);if(kn&&kn.t>=0)return kn.t;try{if(picks.has(k))return picks.get(k)}catch(e){}return -1};
 function paint(){try{
  const userScore=window.__userScore,known=window.__known;if(!userScore)return;
- const arr=[...userScore.entries()].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,RANK_N);
- const key=arr.map(x=>x.join(':')+':'+((info.get(x[0])||{}).url||'')).join('|');
+ const all=[...userScore.entries()].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+ const per=[0,1].map(t=>all.filter(x=>teamOfUser(x[0],known)===t).slice(0,PER_TEAM));
+ const key=per.map((arr,t)=>(T[t]?T[t].id+T[t].c:'')+'>'+arr.map(x=>x.join(':')+':'+((info.get(x[0])||{}).url||'')).join('|')).join('||');
  if(key===last)return;last=key;
  box.textContent='';
- for(let i=0;i<RANK_N;i++){
-  const d=document.createElement('div'),x=arr[i];d.className='u'+(i?'':' f1')+(x?'':' e');
-  const av=document.createElement('div');av.className='av';
-  const n=document.createElement('span');n.className='n';n.textContent=i+1;
-  const s=document.createElement('span');s.className='s';
-  if(x){
-   const k=x[0],o=info.get(k)||(known&&known.get(k)?{name:known.get(k).name,url:known.get(k).url}:{name:k,url:''});
-   const kn=known&&known.get(k);if(kn&&T[kn.t])av.style.setProperty('--c',T[kn.t].c==='#f1f1f1'?'#e5e5e5':T[kn.t].c);
-   const ini=()=>{av.textContent=(o.name||k).replace(/^@/,'').charAt(0).toUpperCase()};
-   const url=o.url||(kn&&kn.url)||'';
-   if(/^https:/.test(url)){const im=new Image();im.referrerPolicy='no-referrer';im.alt='';im.onerror=()=>{im.remove();ini()};im.src=url;av.append(im)}else ini();
-   d.title='@'+(o.name||k)+' · '+x[1]+' pts';s.textContent=fmt(x[1]);
-  }else{s.textContent='0'}
-  d.append(n,av,s);box.append(d);
- }
+ per.forEach((arr,t)=>{
+  const rk=document.createElement('div');rk.className='rk';rk.dataset.t=t;
+  const tc=T[t]&&T[t].c;rk.style.setProperty('--tc',tc==='#f1f1f1'?'#e5e5e5':(tc||'#3f2713'));
+  if(T[t])rk.setAttribute('aria-label','Hinchas de '+T[t].n);
+  for(let i=0;i<PER_TEAM;i++){
+   const d=document.createElement('div'),x=arr[i];d.className='u'+(i?'':' f1')+(x?'':' e');
+   const av=document.createElement('div');av.className='av';
+   const n=document.createElement('span');n.className='n';n.textContent=i+1;
+   const s=document.createElement('span');s.className='s';
+   if(x){
+    const k=x[0],o=info.get(k)||(known&&known.get(k)?{name:known.get(k).name,url:known.get(k).url}:{name:k,url:''});
+    const kn=known&&known.get(k);if(T[t])av.style.setProperty('--c',T[t].c==='#f1f1f1'?'#e5e5e5':T[t].c);
+    const ini=()=>{av.textContent=(o.name||k).replace(/^@/,'').charAt(0).toUpperCase()};
+    const url=o.url||(kn&&kn.url)||'';
+    if(/^https:/.test(url)){const im=new Image();im.referrerPolicy='no-referrer';im.alt='';im.onerror=()=>{im.remove();ini()};im.src=url;av.append(im)}else ini();
+    d.title='@'+(o.name||k)+' · '+x[1]+' pts';s.textContent=fmt(x[1]);
+   }
+   d.append(n,av,s);rk.append(d);
+  }
+  box.append(rk);
+ });
  sizeUp();
 }catch(e){}}
 let lastH=0;
@@ -3728,6 +3884,234 @@ function sizeUp(){const h=box.offsetHeight;if(!h||h===lastH)return;lastH=h;
  document.documentElement.style.setProperty('--pnl',(h+4)+'px');dispatchEvent(new Event('resize'))}
 paint();setInterval(paint,700);
 addEventListener('load',()=>setTimeout(()=>{lastH=0;sizeUp()},700));
+})();
+</script>
+<!-- ===== ARCHIVOS (v1): VOTOS DEL TORNEO LIBRE + TEXTOS DEL CHAT, votos como documento en el SERVIDOR (cluss.libreVotes) y textos del chat como flujo append-only (chat-texts) =====
+ · cluss.libreVotes  = votos por equipo, de la ronda actual, historial de rondas y usuarios UNICOS. Los usuarios se guardan solo como huella con sal (no reversible a nombre); el JSON que se descarga ni siquiera incluye las huellas, solo los conteos.
+ · cluss.chatArchive = TODOS los textos reales del chat (sin bots), SIN autor. Solo [fecha, texto].
+ · Boton 🗂️ de la barra: panel con conteos (sin mostrar textos ni nombres), descarga de votos (JSON), chat (JSON o TXT) y, aparte, "Vaciar archivo del chat" con confirmacion. Descargar NUNCA borra.
+ La retencion de textos y logs la decide el servidor (ya no hay limite de espacio del navegador); solo se recortan las rondas de votos mas viejas (tope MAX_ROUNDS). Para quitar: borrar este bloque (y el bloque de libreArchive en TORNEO LIBRE es inofensivo). ===== -->
+<style id="archivo-css">
+#arch{position:absolute;inset:0;z-index:40;background:#1b120a;color:#f3ece1;padding:10px;display:flex;flex-direction:column;gap:8px;font:12px/1.4 Inter,sans-serif;overflow:auto}
+#arch[hidden]{display:none}
+#arch header{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+#arch section{background:#2c1b0d;border:1px solid #6f4a28;border-radius:10px;padding:8px}
+#arch h3{margin:0 0 4px;font:900 12px Inter,sans-serif;color:#ffe14d}
+#arch button{font:700 11px Inter,sans-serif;color:#f3ece1;background:#3f2713;border:1px solid #6e4524;border-radius:999px;padding:5px 10px;cursor:pointer;margin:3px 3px 0 0}
+#arch button.warn{background:#7a1f1f;border-color:#e11d48}
+#arch .mut{color:#a39a8b;font-size:11px}
+#arch ul{margin:4px 0 0;padding-left:16px}
+#arch .ok{color:#7dffa0}
+</style>
+<script>
+(function(){
+'use strict';
+const K_V='cluss.libreVotes',K_C='cluss.chatArchive',MAX_ROUNDS=500,MAX_TXT=500;
+const ld=k=>SRV.get(k,null);   /* BACKEND: cluss.libreVotes viene en /api/state.js */
+const sv=(k,v)=>SRV.set(k,v);  /* BACKEND: PUT /api/state/cluss.libreVotes (pesado, 1 PUT / 5 s) */
+const iso=t=>new Date(t).toISOString(),stamp=()=>iso(Date.now()).replace(/[:.]/g,'-').toLowerCase();
+const persist=(key,obj,trim)=>{for(let i=0;i<40;i++){if(sv(key,obj))return true;if(!trim())break}return false};
+
+/* ---------- VOTOS DEL TORNEO LIBRE ---------- */
+let VS=ld(K_V);
+if(!VS||typeof VS!=='object'||VS.v!==1)VS={v:1,salt:Math.random().toString(36).slice(2)+Date.now().toString(36),created:Date.now(),updated:Date.now(),total:{},round:{},all:[],rounds:[]};
+['total','round'].forEach(k=>{if(!VS[k]||typeof VS[k]!=='object')VS[k]={}});if(!Array.isArray(VS.all))VS.all=[];if(!Array.isArray(VS.rounds))VS.rounds=[];
+/* huella con sal de 53 bits (cyrb53): cuenta personas distintas sin guardar el nombre */
+const H=s=>{let a=0xdeadbeef,b=0x41c6ce57;for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);a=Math.imul(a^c,2654435761);b=Math.imul(b^c,1597334677)}a=Math.imul(a^(a>>>16),2246822507)^Math.imul(b^(b>>>13),3266489909);b=Math.imul(b^(b>>>16),2246822507)^Math.imul(a^(a>>>13),3266489909);return(4294967296*(2097151&b)+(a>>>0)).toString(36)};
+const uid=u=>H(VS.salt+'|'+String(u).trim().toLowerCase());
+let vT=0;
+const saveV=now=>{if(now){clearTimeout(vT);vT=0;persist(K_V,VS,()=>VS.rounds.length?(VS.rounds.splice(0,Math.ceil(VS.rounds.length*.2)),true):false);return}
+ if(!vT)vT=setTimeout(()=>{vT=0;saveV(true)},500)};
+function vote(user,ids){
+ if(!user||!ids||!ids.length)return;
+ const h=uid(user);
+ ids.forEach(id=>{[VS.total,VS.round].forEach(m=>{const r=m[id]||(m[id]={votes:0,u:[]});r.votes++;if(!r.u.includes(h))r.u.push(h)})});
+ if(!VS.all.includes(h))VS.all.push(h);
+ VS.updated=Date.now();saveV();
+}
+function commitRound(duel){ /* la ronda de votos termina cuando se sortea el duelo siguiente */
+ const ids=Object.keys(VS.round);
+ if(ids.length){
+  const un=new Set(),votes={};
+  ids.forEach(id=>{const r=VS.round[id];r.u.forEach(x=>un.add(x));votes[id]={votes:r.votes,uniqueUsers:r.u.length}});
+  VS.rounds.push({t:Date.now(),duel:(duel||[]).slice(),votes,uniqueUsers:un.size});
+  while(VS.rounds.length>MAX_ROUNDS)VS.rounds.shift();
+ }
+ VS.round={};VS.updated=Date.now();saveV(true);
+}
+const tname=id=>{try{const it=(typeof librePool==='function'&&librePool()[id])||tournamentItem(id);return it?it.n:id}catch(e){return id}};
+const rows=m=>Object.keys(m).map(id=>({id,equipo:tname(id),votos:m[id].votes,usuariosUnicos:m[id].u.length})).sort((a,b)=>b.votos-a.votos||a.equipo.localeCompare(b.equipo));
+const sum=m=>Object.values(m).reduce((a,r)=>a+r.votes,0);
+function votesObj(){
+ const ru=new Set();Object.values(VS.round).forEach(r=>r.u.forEach(x=>ru.add(x)));
+ return{formato:'cluss-torneo-libre-votos',version:1,exportadoEn:iso(Date.now()),creadoEn:iso(VS.created),actualizadoEn:iso(VS.updated),
+  privacidad:'Sin nombres de usuario. Los usuarios únicos se cuentan con huellas con sal que no se exportan.',
+  resumen:{votosTotales:sum(VS.total),usuariosUnicos:VS.all.length,rondasRegistradas:VS.rounds.length},
+  equipos:rows(VS.total),
+  rondaActual:{votos:sum(VS.round),usuariosUnicos:ru.size,equipos:rows(VS.round)},
+  rondas:VS.rounds.map(r=>({fecha:iso(r.t),duelo:r.duel.map(tname),usuariosUnicos:r.uniqueUsers,
+   votos:Object.keys(r.votes).map(id=>({id,equipo:tname(id),votos:r.votes[id].votes,usuariosUnicos:r.votes[id].uniqueUsers}))}))};
+}
+/* enganche: al sortear el duelo siguiente se cierra la ronda de votos */
+const _ld=libreDuel;
+libreDuel=function(){const d=_ld.apply(this,arguments);try{commitRound(d)}catch(e){console.error(e)}return d};
+/* tras recargar la pagina, la ronda de votos en curso sigue (menos los equipos que ya juegan) */
+try{if(!Object.keys(libreVotes).length){const playing=new Set((typeof DUELO!=='undefined'?DUELO:[]).map(libreCanon));
+ Object.keys(VS.round).forEach(id=>{if(!playing.has(id)&&VS.round[id].votes>0)libreVotes[id]=VS.round[id].votes})}}catch(e){}
+window.libreArchive={vote,commitRound,data:votesObj};
+
+/* ---------- ARCHIVO DE TEXTOS DEL CHAT (sin autor) ---------- */
+/* BACKEND: los textos del chat YA NO se guardan en el cliente: cada texto se agrega al flujo chat-texts (POST /api/log/chat-texts). El cliente solo lleva un contador; el valor inicial sale de la clave de solo lectura cluss.chatArchive = {v,created,updated,trimmed,count} que el servidor puede incluir en /api/state.js. */
+let CA=ld(K_C);
+if(!CA||typeof CA!=='object'||CA.v!==1)CA={v:1,created:Date.now(),updated:Date.now(),trimmed:0,count:0};
+CA=Object.assign({},CA,{count:+CA.count||0}); /* copia: el cliente nunca reenvia este documento */
+const saveC=now=>{if(now)SRV.flush(true)}; /* solo vacia la cola de envio al servidor */
+function addChat(text){const t=String(text==null?'':text).replace(/\s+/g,' ').trim().slice(0,MAX_TXT);if(!t)return;SRV.log('chat-texts',[Date.now(),t]);CA.count++;CA.updated=Date.now()}
+const SRVCHAT_JSON='/api/log/chat-texts.json',SRVCHAT_TXT='/api/log/chat-texts.txt'; /* BACKEND: descargas del archivo completo del chat, con Content-Disposition: attachment */
+const chatJSON=()=>fetch(SRVCHAT_JSON).then(r=>r.text());
+const chatTXT=()=>fetch(SRVCHAT_TXT).then(r=>r.text());
+function clearChat(){SRV.clearLog('chat-texts');CA.count=0;CA.trimmed=0;CA.created=CA.updated=Date.now()} /* BACKEND: DELETE /api/log/chat-texts */ /* SOLO la llama el boton confirmado */
+const _hle=handleLiveEntry;
+handleLiveEntry=function(e){try{if(e&&!e.bot&&e.type==='chat')addChat(e.content)}catch(x){console.error(x)}return _hle.apply(this,arguments)};
+addEventListener('pagehide',()=>{saveV(true);saveC(true)});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){saveV(true);saveC(true)}});
+
+/* ---------- DESCARGA ---------- */
+function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+const dlVotes=()=>dl('torneo-libre-votos-'+stamp()+'.json',JSON.stringify(votesObj(),null,1),'application/json');
+const dlSrv=(url,name)=>{const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()};
+const dlChatJSON=()=>dlSrv(SRVCHAT_JSON,'chat-textos-'+stamp()+'.json');
+const dlChatTXT=()=>dlSrv(SRVCHAT_TXT,'chat-textos-'+stamp()+'.txt');
+
+/* ---------- PANEL ---------- */
+const app=document.getElementById('app')||document.body,p=document.createElement('div');
+p.id='arch';p.hidden=true;p.setAttribute('role','dialog');p.setAttribute('aria-label','Archivos de votos y chat');
+p.innerHTML='<header><b>🗂️ Archivos</b><button type="button" data-a="close" aria-label="Cerrar">✕</button></header>'
++'<section><h3>🗳️ Votos del Torneo Libre</h3><div id="arV"></div><ul id="arVl"></ul><div class="mut">Solo conteos: sin nombres de usuario.</div>'
++'<button type="button" data-a="votes">⬇ Votos (JSON)</button></section>'
++'<section><h3>💬 Textos del chat</h3><div id="arC"></div><div class="mut">Solo el texto y la hora: sin autor. Descargar no borra nada.</div>'
++'<button type="button" data-a="cjson">⬇ Chat (JSON)</button><button type="button" data-a="ctxt">⬇ Chat (TXT)</button></section>'
++'<section><h3>🗑️ Vaciar archivo del chat</h3><div id="arK"><button type="button" class="warn" data-a="ask">Vaciar archivo del chat…</button></div><div id="arM" class="mut"></div></section>';
+app.appendChild(p);
+const $a=s=>p.querySelector(s);let askT=0;
+function stopAsk(){clearTimeout(askT);askT=0;$a('#arK').innerHTML='<button type="button" class="warn" data-a="ask">Vaciar archivo del chat…</button>'}
+function paint(){
+ if(p.hidden)return;
+ const r=rows(VS.round).slice(0,5);
+ $a('#arV').textContent='Votos: '+sum(VS.total)+' · Usuarios únicos: '+VS.all.length+' · Rondas: '+VS.rounds.length;
+ $a('#arVl').innerHTML=r.length?r.map(x=>'<li>'+x.equipo.replace(/[<&]/g,'')+': '+x.votos+' voto'+(x.votos===1?'':'s')+' ('+x.usuariosUnicos+' usuario'+(x.usuariosUnicos===1?'':'s')+')</li>').join(''):'<li class="mut">Sin votos en la ronda actual</li>';
+ $a('#arC').textContent='Textos archivados (en el servidor): '+CA.count;
+}
+function open(){p.hidden=false;stopAsk();$a('#arM').textContent='';paint()}
+function close(){p.hidden=true;stopAsk()}
+p.addEventListener('click',e=>{const b=e.target.closest('button[data-a]');if(!b)return;const a=b.dataset.a,m=$a('#arM');
+ if(a==='close')close();
+ else if(a==='votes'){dlVotes();m.textContent='Votos descargados (el archivo se conserva).'}
+ else if(a==='cjson'){dlChatJSON();m.textContent='Chat (JSON) descargado (el archivo se conserva).'}
+ else if(a==='ctxt'){dlChatTXT();m.textContent='Chat (TXT) descargado (el archivo se conserva).'}
+ else if(a==='ask'){$a('#arK').innerHTML='<div>¿Vaciar '+CA.count+' textos? No se puede deshacer.</div><button type="button" class="warn" data-a="yes">Sí, vaciar</button><button type="button" data-a="no">Cancelar</button>';askT=setTimeout(stopAsk,8000)}
+ else if(a==='no')stopAsk();
+ else if(a==='yes'){clearChat();stopAsk();m.textContent='Archivo del chat vaciado.'}
+ paint()});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!p.hidden)close()});
+setInterval(paint,1000);
+const bs=document.getElementById('bStat');
+if(bs){const b=document.createElement('button');b.className='sm';b.id='bArch';b.type='button';b.textContent='🗂️';b.setAttribute('aria-label','Archivos: votos del Torneo Libre y textos del chat');b.title='Archivos: votos y chat';b.addEventListener('click',open);bs.parentNode.insertBefore(b,bs)}
+window.archivoCluss={open,close,votes:{vote,commitRound,obj:votesObj,json:()=>JSON.stringify(votesObj(),null,1),download:dlVotes},chat:{add:addChat,count:()=>CA.count,json:chatJSON,txt:chatTXT,clear:clearChat,downloadJSON:dlChatJSON,downloadTXT:dlChatTXT}};
+})();
+</script>
+
+<!-- ===== GAMIFICACION Y EFECTOS v2 (capa final, solo reacciona a eventos REALES; el bot nunca; no pide ni promete nada). Incluye: fanfarria de NIVEL, HINCHADA (ritmo de eventos en 8 s con 3 escalones), primer regalo de la ronda, lluvia de monedas con sacudida por regalo, y lineas de velocidad en el carril con TURBO. Para quitar: borrar este bloque. ===== -->
+<style id="gami-v2">
+.lane.turbo .sv:after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;border-radius:9px;
+ background:repeating-linear-gradient(180deg,rgba(255,235,120,.75) 0 24px,transparent 24px 64px);background-size:100% 64px;
+ -webkit-mask-image:repeating-linear-gradient(90deg,#000 0 2px,transparent 2px 19px);mask-image:repeating-linear-gradient(90deg,#000 0 2px,transparent 2px 19px);
+ opacity:.55;animation:gmSpd .28s linear infinite}
+@keyframes gmSpd{to{background-position:0 64px}}
+#nivelBadge{position:relative}
+#nivelBadge.up:after{content:"🆙";position:absolute;right:-8px;top:-12px;font-size:16px;animation:gmUp 1s ease-out forwards}
+@keyframes gmUp{0%{opacity:0;transform:translateY(6px) scale(.4)}25%{opacity:1;transform:translateY(-2px) scale(1.3)}100%{opacity:0;transform:translateY(-18px) scale(1)}}
+#gmHot{position:absolute;left:50%;top:44px;transform:translateX(-50%);z-index:45;display:none;padding:3px 12px;border-radius:12px;border:2px solid #ff8a1f;background:rgba(20,8,2,.88);color:#ffd34d;font:900 12px/1.1 Inter,sans-serif;letter-spacing:.4px;text-shadow:0 1px 2px #000;pointer-events:none;white-space:nowrap}
+#gmHot.on{display:block;animation:gmHot 1.2s ease-in-out infinite alternate}
+@keyframes gmHot{from{box-shadow:0 0 6px 1px rgba(255,138,31,.6)}to{box-shadow:0 0 16px 5px rgba(255,138,31,.95)}}
+@media (prefers-reduced-motion:reduce){.lane.turbo .sv:after,#nivelBadge.up:after,#gmHot.on{animation:none}}
+</style>
+<script>
+(function(){
+const F=window.fx;if(!F||!F.cannon||!F.FA)return;
+const app=document.getElementById('app'),board=document.querySelector('.board'),RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const hot=document.createElement('div');hot.id='gmHot';hot.setAttribute('aria-hidden','true');app.appendChild(hot);
+const shake=()=>{if(!board||RM)return;board.classList.remove('shake');void board.offsetWidth;board.classList.add('shake')};
+let lastLv=0;
+/* 1) NIVEL: fanfarria al subir (el cartel #nivelBadge lo anima levelUp) */
+const nb=document.getElementById('nivelBadge');
+if(nb&&window.MutationObserver)new MutationObserver(()=>{
+ const now=performance.now();if(!nb.classList.contains('up')||now-lastLv<400)return;lastLv=now;
+ const n=(nb.textContent.match(/\d+/)||['?'])[0];
+ F.banner('🆙 NIVEL '+n,'#ffd34d');F.flash('#ffe9a8');
+ F.cannon(0,746,-62,22,700,16);F.cannon(416,746,-118,22,700,16);F.FA.p('star');F.FA.p('mile',.15);
+ if(+n%5===0){F.firework(208,230);setTimeout(()=>F.firework(110,300,'#ffd34d'),350);setTimeout(()=>F.firework(310,300,'#5ec3f2'),700);F.FA.p('champ')}
+}).observe(nb,{attributes:true,attributeFilter:['class']});
+/* 2) HINCHADA: eventos reales de los ultimos 8 s; 3 escalones, cada uno una vez por ronda con 20 s de enfriamiento */
+const ev=[],TIERS=[[10,'🔥 HINCHADA CALIENTE','#ff8a1f'],[25,'⚡ HINCHADA EN LLAMAS','#ffd34d'],[50,'🌋 HINCHADA ÉPICA','#e11d48']];
+let tierDone=-1,tierAt=0,firstGift=false,hotT=0;
+function pulse(){const now=Date.now();while(ev.length&&now-ev[0]>8000)ev.shift();return ev.length}
+function onTier(i){
+ const [,txt,col]=TIERS[i];F.banner(txt,col);F.FA.p(i===2?'champ':i===1?'comeback':'mile');
+ F.burst(208,330,col,34,240);F.ring(208,330,col);
+ if(i>=1){F.cannon(0,746,-62,18,680,16);F.cannon(416,746,-118,18,680,16)}
+ if(i===2){F.flash('#ffb347');F.firework(208,200);shake()}
+ hot.textContent=txt;hot.style.borderColor=col;hot.classList.add('on');clearTimeout(hotT);hotT=setTimeout(()=>hot.classList.remove('on'),6000);
+}
+/* 3) REGALOS reales: lluvia de monedas + sacudida; el primero de la ronda tiene cartel propio */
+const _h=handleLiveEntry;
+handleLiveEntry=function(e){
+ const r=_h.apply(this,arguments);
+ try{if(e&&!e.bot&&['chat','like','gift','follow','share'].includes(e.type)){
+  const w=e.type==='like'?Math.min(5,Math.max(1,+e.activityCount||1)):e.type==='gift'?5:1;
+  for(let k=0;k<w;k++)ev.push(Date.now());
+  const n=pulse(),now=performance.now();
+  if(now-tierAt>20000)for(let i=TIERS.length-1;i>tierDone;i--)if(n>=TIERS[i][0]){tierDone=i;tierAt=now;onTier(i);break}
+  if(e.type==='gift'&&!(typeof over!=='undefined'&&over)){
+   const q=Math.max(1,+e.activityCount||1);
+   F.rain(Math.min(40,10+q*4),['#ffd34d','#ffe9a8','#ff8a1f'],900);F.FA.p('heart');shake();
+   if(!firstGift){firstGift=true;F.banner('🎁 ¡PRIMER REGALO!','#e11d48');F.cannon(208,746,-90,20,600,30)}
+  }}}catch(x){console.error(x)}
+ return r};
+/* cada ronda nueva reinicia escalones y primer regalo */
+const _r=reset;
+reset=function(){tierDone=-1;tierAt=0;firstGift=false;ev.length=0;hot.classList.remove('on');return _r.apply(this,arguments)};
+})();
+</script>
+
+<!-- ===== CORAZON DEL LIMITE DE TAPS: mas grande y LATIENDO (el ritmo se acelera a medida que el contador se llena). Para quitar: borrar este bloque. ===== -->
+<style id="corazon-late">
+.hb{height:24px!important}
+.hb .hi{left:-4px!important;margin-top:-13px!important;font-size:26px!important;line-height:26px!important;z-index:4;transform-origin:50% 55%;
+ filter:drop-shadow(0 0 6px rgba(255,45,85,.9)) drop-shadow(0 2px 2px rgba(0,0,0,.8));
+ animation:gmHeart 8s linear infinite!important}
+.hb.bump .hi,.hb.full .hi{animation:gmHeart 8s linear infinite!important}
+.hb i{margin-left:18px!important}
+.hb em{left:26px!important}
+/* sincronizado con el regalo (#regalos .ic usa rgWob 1.6 s alternate: escala 1 -> 1.15). Aqui es al reves: cuando el regalo SUBE, el corazon BAJA */
+/* TURNOS (ciclo de 8 s): primero SUBE el regalo (rapido), espera arriba y BAJA despacio; recien cuando termino de bajar, SUBE el corazon, espera y baja despacio. Nunca estan los dos arriba a la vez. */
+@keyframes gmGift{0%{transform:scale(1);animation-timing-function:ease-out}8%{transform:scale(1.3);animation-timing-function:linear}30%{transform:scale(1.3);animation-timing-function:ease-in-out}50%,100%{transform:scale(1)}}
+@keyframes gmHeart{0%,50%{transform:scale(.8);animation-timing-function:ease-out}58%{transform:scale(1.3);animation-timing-function:linear}80%{transform:scale(1.3);animation-timing-function:ease-in-out}100%{transform:scale(.8)}}
+#regalos .ic,#regalos .gc:nth-child(2) .ic,#regalos .gc:nth-child(3) .ic{animation:gmGift 8s linear infinite!important;animation-delay:0s!important;transform-origin:50% 60%}
+.hb.bump i{box-shadow:0 0 8px 2px rgba(255,90,130,.95)}
+@media (prefers-reduced-motion:reduce){.hb .hi,.hb.bump .hi,.hb.full .hi,#regalos .ic{animation:none!important}}
+</style>
+<script>
+(function(){
+/* ritmo del latido: 2.0 s con el contador vacio -> 1.3 s casi lleno (el limite y el valor salen de aria-valuemax / aria-valuenow) */
+function ritmo(){document.querySelectorAll('.hb').forEach(h=>{
+ const max=+h.getAttribute('aria-valuemax')||1,now=+h.getAttribute('aria-valuenow')||0,r=Math.max(0,Math.min(1,now/max));
+ const d=(3.0-0.8*r).toFixed(2)+'s';if(h.style.getPropertyValue('--bd')!==d)h.style.setProperty('--bd',d)})}
+setInterval(ritmo,300);ritmo();
+/* SINCRONIA: corazon y regalo comparten reloj (startTime 0) y el mismo ciclo de 8 s, por turnos */
+function sincro(){try{document.querySelectorAll('.hb .hi,#regalos .ic').forEach(el=>el.getAnimations().forEach(a=>{
+ if(a.animationName==='gmHeart'||a.animationName==='gmGift'){if(a.startTime!==0)a.startTime=0}}))}catch(e){}}
+sincro();setTimeout(sincro,800);addEventListener('load',sincro);setInterval(sincro,2000);
 })();
 </script>
 </body>

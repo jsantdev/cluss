@@ -60,7 +60,7 @@ function createTikTokModule({
   state.username = username;
 
   function publish(event, payload) {
-    stream.broadcast(event, payload);
+    if (event === 'status' || event === 'update') stream.broadcast(event, payload);
   }
 
   function handleEvent(entry) {
@@ -80,7 +80,7 @@ function createTikTokModule({
       const freeStats = freeTournament.recordComment(entry);
       if (freeStats) publish('free-tournament-stats', freeStats);
     }
-    publish('update', { entry, events });
+    publish('update', { entry });
   }
 
   function getCommentStats() {
@@ -182,10 +182,7 @@ function createTikTokModule({
   }
 
   function openEventStream(response) {
-    stream.attach(response, [
-      ['status', { ...state }],
-      ['snapshot', events],
-    ]);
+    stream.attach(response, [['status', { ...state }]]);
   }
 
   function registerRoutes(app) {

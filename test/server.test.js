@@ -61,25 +61,23 @@ async function readEvent(reader, eventName) {
   return message;
 }
 
-test('serves the Cluss TikTok overlay as a full-screen PWA', async () => {
+test('serves v21 as the main Cluss TikTok overlay', async (t) => {
   const root = path.join(__dirname, '..');
   const dockerfile = fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8');
-  assert.match(dockerfile, /COPY v10\.html \.\//);
-  assert.equal(fs.existsSync(path.join(root, 'v10.html')), true);
+  assert.match(dockerfile, /COPY v21\.html \.\//);
+  assert.equal(fs.existsSync(path.join(root, 'v21.html')), true);
+  assert.equal(fs.existsSync(path.join(root, 'v21 (1).html')), false);
+  assert.equal(fs.existsSync(path.join(root, 'v10.html')), false);
   assert.equal(fs.existsSync(path.join(root, 'cluss.html')), false);
   assert.equal(fs.existsSync(path.join(root, 'tortugas_tiktok.html')), false);
-  assert.equal(fs.existsSync(path.join(root, 'v2_1 (1).html')), false);
   assert.equal(fs.existsSync(path.join(root, 'tortugas.html')), false);
-  assert.equal(fs.existsSync(path.join(root, 'v1.3.html')), false);
-  assert.equal(fs.existsSync(path.join(root, 'v68.html')), false);
-  assert.equal(fs.existsSync(path.join(root, 'v11.html')), false);
-  assert.doesNotMatch(dockerfile, /v1\.3\.html/);
-  assert.doesNotMatch(dockerfile, /v45\.html/);
-  assert.equal(fs.existsSync(path.join(root, 'v45.html')), false);
 
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'tortu-overlay-test-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const monitorService = createMonitorService();
   const { server } = createWebserver({
-    configurationPath: path.join(os.tmpdir(), `tortu-test-${process.pid}.json`),
+    configurationPath: path.join(directory, 'config.json'),
+    overlayDataPath: path.join(directory, 'overlay'),
     monitorService,
   });
   const baseUrl = await listen(server);
@@ -95,26 +93,20 @@ test('serves the Cluss TikTok overlay as a full-screen PWA', async () => {
     assert.equal(monitorService.state.isConnected, false, 'serving the overlay must not connect TikTok');
     assert.match(rootResponse.headers.get('cache-control'), /no-store/);
     const servedHtml = await rootResponse.text();
-    assert.equal(servedHtml, fs.readFileSync(path.join(root, 'v10.html'), 'utf8'));
+    assert.equal(servedHtml, fs.readFileSync(path.join(root, 'v21.html'), 'utf8'));
     assert.match(servedHtml, /new EventSource\('\/api\/events'\)/);
     assert.match(servedHtml, /source\.addEventListener\('status'/);
     assert.match(servedHtml, /source\.addEventListener\('update'/);
-    assert.match(servedHtml, /fetch\('\/api\/reconnect'/);
-    assert.match(servedHtml, /function handleLiveEntry\(entry\)/);
-    assert.match(servedHtml, /const HINCHAS_JSON=\[/);
-    assert.match(servedHtml, /const TAP_WEIGHTS=\{member:1,chat:10,like:1,follow:3,share:5\}/);
+    assert.match(servedHtml, /<script src="\/api\/state\.js"><\/script>/);
+    assert.match(servedHtml, /window\.SRV=/);
+    assert.match(servedHtml, /SRV\.log\('user-events'/);
+    assert.match(servedHtml, /SRV\.log\('chat-texts'/);
+    assert.match(servedHtml, /SRVCHAT_JSON='\/api\/log\/chat-texts\.json'/);
     assert.match(servedHtml, /<script src="\/activity-policy\.js"><\/script>/);
-    assert.match(servedHtml, /v1\.2\.2/);
-    assert.match(servedHtml, /id="idleCountdown"/);
-    assert.match(servedHtml, /id="tapLimit"/);
-    assert.match(servedHtml, /box\.id='rank'/);
-    assert.match(servedHtml, /data-tab="libre"/);
-    assert.match(servedHtml, /data-tab="comentarios"/);
-    assert.match(servedHtml, /TAP_POLICY\.statEventDelta\(e\.type,e\.activityCount\)/);
-    assert.match(servedHtml, /TAP_POLICY\.inactivityRemainingSeconds\(now-lastInteractionAt,IDLE_LIMIT_MS\)/);
-    assert.match(servedHtml, /e\.profilePictureUrl\|\|e\.profilePicture/);
-    assert.match(servedHtml, /data-local-only disabled/);
-    assert.match(servedHtml, /rel="manifest" href="\/manifest.webmanifest"/);
+    assert.match(servedHtml, /@keyframes gmGift/);
+    assert.match(servedHtml, /@keyframes gmHeart/);
+    assert.match(servedHtml, /function sincro\(\)/);
+    assert.doesNotMatch(servedHtml, /(?:localStorage|sessionStorage|indexedDB)\.(?:getItem|setItem|open)/);
     assert.deepEqual(await fetch(`${baseUrl}/api/config`).then((response) => response.json()), {
       username: 'd4n1el325',
     });
@@ -132,6 +124,7 @@ test('serves the Cluss TikTok overlay as a full-screen PWA', async () => {
     assert.equal(serviceWorker.status, 200);
     assert.match(await serviceWorker.text(), /tortu-shell-v13/);
     assert.equal((await fetch(`${baseUrl}/activity-policy.js`)).status, 200);
+    assert.equal((await fetch(`${baseUrl}/api/activity-policy.js`)).status, 200);
     const manifest = await fetch(`${baseUrl}/manifest.webmanifest`);
     assert.equal(manifest.status, 200);
     const appManifest = await manifest.json();
@@ -146,7 +139,7 @@ test('serves the Cluss TikTok overlay as a full-screen PWA', async () => {
   }
 });
 
-test('forwards normalized TikTok updates in the shape consumed by version 68', async () => {
+test('forwards normalized TikTok updates in the shape consumed by v21', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'tortu-test-'));
   const monitorService = createMonitorService();
   const { server } = createWebserver({
@@ -226,7 +219,8 @@ test('forwards normalized TikTok updates in the shape consumed by version 68', a
   try {
     const stream = await fetch(`${baseUrl}/api/events`);
     reader = stream.body.getReader();
-    await reader.read();
+    const initialStatus = await readEvent(reader, 'status');
+    assert.doesNotMatch(initialStatus, /event: snapshot/);
 
     const configResponse = await fetch(`${baseUrl}/api/config`, {
       method: 'PUT',
@@ -251,7 +245,7 @@ test('forwards normalized TikTok updates in the shape consumed by version 68', a
     monitorService.emit(entry);
     const update = await readEvent(reader, 'update');
     const payload = JSON.parse(update.match(/event: update\ndata: (.+)\n/)[1]);
-    assert.deepEqual(payload.entry, entry);
+    assert.deepEqual(payload, { entry });
 
     const stats = await fetch(`${baseUrl}/api/comment-stats`).then((response) => response.json());
     assert.equal(stats.total, 1);
